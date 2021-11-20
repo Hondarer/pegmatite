@@ -77,22 +77,28 @@ function changeBackgroundColor(element, color, exist) {
 	}
 }
 
-function replaceElement(umlElem, srcUrl) {
+function replaceElement(umlElem, srcUrl, disableChangeBackgroundColor = false) {
 	var parent = umlElem.parentNode;
 	if (parent !== null) { // for asciidoc (div div pre)
 		var imgElem = document.createElement("img");
 		imgElem.setAttribute("src", escapeHtml(srcUrl));
 		imgElem.setAttribute("title", "");
 		parent.replaceChild(imgElem, umlElem);
-		changeBackgroundColor(parent, codePre.parentColor, codePre.exist);
+		if (!disableChangeBackgroundColor) {
+			changeBackgroundColor(parent, codePre.parentColor, codePre.exist);
+		}
 
 		imgElem.ondblclick = function() {
 			parent.replaceChild(umlElem, imgElem);
-			changeBackgroundColor(parent, codePre.selfColor, codePre.exist);
+			if (!disableChangeBackgroundColor) {
+				changeBackgroundColor(parent, codePre.selfColor, codePre.exist);
+			}
 		};
 		umlElem.ondblclick = function() {
 			parent.replaceChild(imgElem, umlElem);
-			changeBackgroundColor(parent, codePre.parentColor, codePre.exist);
+			if (!disableChangeBackgroundColor) {
+				changeBackgroundColor(parent, codePre.parentColor, codePre.exist);
+			}
 		};
 	}
 }
@@ -184,6 +190,20 @@ var siteProfiles = {
 			}
 			return compress(plantuml);
 		}
+	},
+	"gitbucket": {
+		"selector": "pre.prettyprint.lang-puml, pre.prettyprint.lang-plantuml",
+		"extract": function (elem) {
+			return elem.innerText.trim();
+		},
+		"replace": function (elem) {
+			return elem;
+		},
+		"compress": function (elem) {
+			return compress(elem.innerText.trim());
+		},
+		"autoCompleteStartEnd": true,
+		"disableChangeBackgroundColor": true
 	}
 };
 
@@ -201,22 +221,37 @@ function loop(counter, retry, siteProfile, baseUrl){
 function onLoadAction(siteProfile, baseUrl){
 	[].forEach.call(document.querySelectorAll(siteProfile.selector), function (umlElem) {
 		var plantuml = siteProfile.extract(umlElem);
-		if (plantuml.substr(0, "@start".length) !== "@start") return;
+		if (plantuml.substr(0, "@start".length) !== "@start") {
+			if ((siteProfile.autoCompleteStartEnd || false) == true) {
+				plantuml = "@startuml\r\n" + plantuml + "\r\n@enduml";
+			} else {
+				return;
+			}
+		}
 		var plantUmlServerUrl = baseUrl + siteProfile.compress(umlElem);
 		var replaceElem = siteProfile.replace(umlElem);
+		var disableChangeBackgroundColor = siteProfile.disableChangeBackgroundColor || false;
 		if (plantUmlServerUrl.lastIndexOf("https", 0) === 0) { // if URL starts with "https"
-			replaceElement(replaceElem, plantUmlServerUrl);
+			replaceElement(replaceElem, plantUmlServerUrl, disableChangeBackgroundColor);
 		} else {
 			// to avoid mixed-content
 			chrome.runtime.sendMessage({ "action": "plantuml", "url": plantUmlServerUrl }, function(dataUri) {
-				replaceElement(replaceElem, dataUri);
+				replaceElement(replaceElem, dataUri, disableChangeBackgroundColor);
 			});
 		}
 	});
 }
 
 function run(config) {
-	var hostname = window.location.hostname.split(".").slice(-2).join(".");
+
+	var hostname;
+	if (window.location.pathname.substr(0, "/gitbucket".length) == "/gitbucket") {
+		hostname = "gitbucket";
+	}
+	else {
+		hostname = window.location.hostname.split(".").slice(-2).join(".");
+	}
+
 	var siteProfile = siteProfiles[hostname] || siteProfiles["default"];
 	var baseUrl = config.baseUrl || "https://www.plantuml.com/plantuml/img/";
 	if (document.querySelector("i[aria-label='Loading content…']")!=null){ // for wait loading @ gitlab.com
@@ -224,15 +259,22 @@ function run(config) {
 	}
 	[].forEach.call(document.querySelectorAll(siteProfile.selector), function (umlElem) {
 		var plantuml = siteProfile.extract(umlElem);
-		if (plantuml.substr(0, "@start".length) !== "@start") return;
+		if (plantuml.substr(0, "@start".length) !== "@start") {
+			if ((siteProfile.autoCompleteStartEnd || false) == true) {
+				plantuml = "@startuml\r\n" + plantuml + "\r\n@enduml";
+			} else {
+				return;
+			}
+		}
 		var plantUmlServerUrl = baseUrl + siteProfile.compress(umlElem);
 		var replaceElem = siteProfile.replace(umlElem);
+		var disableChangeBackgroundColor = siteProfile.disableChangeBackgroundColor || false;
 		if (plantUmlServerUrl.lastIndexOf("https", 0) === 0) { // if URL starts with "https"
-			replaceElement(replaceElem, plantUmlServerUrl);
+			replaceElement(replaceElem, plantUmlServerUrl, disableChangeBackgroundColor);
 		} else {
 			// to avoid mixed-content
 			chrome.runtime.sendMessage({ "action": "plantuml", "url": plantUmlServerUrl }, function(dataUri) {
-				replaceElement(replaceElem, dataUri);
+				replaceElement(replaceElem, dataUri, disableChangeBackgroundColor);
 			});
 		}
 	});

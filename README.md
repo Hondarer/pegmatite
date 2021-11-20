@@ -1,8 +1,7 @@
-# Pegmatite - Chrome ext to preview PlantUML in markdown
+# Pegmatite-gitbucket - Chrome ext to preview PlantUML in markdown
 
 Pegmatite is Google Chrome extension that replace PlantUML code blocks into preview images.
-
-[Chrome web store](https://chrome.google.com/webstore/detail/pegmatite/jegkfbnfbfnohncpcfcimepibmhlkldo)
+This version is the original Pegmatite with enhanced GitBucket support.
 
 ## Summary
 
@@ -17,8 +16,10 @@ Pegmatite is Google Chrome extension that replace PlantUML code blocks into prev
     * `https://gitlab.com/*`
     * `https://bitbucket.org/*`
     * `https://*.backlog.jp/wiki/*`
+    * `http://*/gitbucket/*`
 * Replace only code block with lang `uml` and starts with `@start`.
     * lang `puml` or `plantuml` is also supported.
+    * Depending on per-site profile, can enable auto-completion when `@startuml` is omitted.
 * When the element is double-clicked, element will toggle original code block and preview image.
 
 ## Sample contents
@@ -61,9 +62,19 @@ Foo -> Bar
 @enduml
 ```
 
-#### `uml` code block does not starts with `@start`
+### `plantuml` code block does not starts with `@start`
 
-```uml
+```plantuml
+Alice -> Bob: Authentication Request
+Bob --> Alice: Authentication Response
+
+Alice -> Bob: Another authentication Request
+Alice <-- Bob: another authentication Response
+```
+
+#### `puml` code block does not starts with `@start` and syntax error
+
+```puml
 foo
 bar
 baz
@@ -105,3 +116,7 @@ generated image is converted to [DATA URI](https://tools.ietf.org/html/rfc2397).
 ## Author
 
 [Daisuke Miyamoto](https://github.com/dai0304)
+
+### Enhanced by
+
+[Tetsuo Honda](https://github.com/hondarer)

@@ -1,9 +1,9 @@
 {
   "manifest_version": 2,
-  "name": "Pegmatite",
-  "version": "1.6.0",
+  "name": "Pegmatite-gitbucket",
+  "version": "1.6.1",
   "description": "Shows graphs and diagrams rendered by PlantUML.",
-  "permissions": ["storage", "https://*/*", "tabs"],
+  "permissions": ["storage", "https://*/*", "http://*/*", "tabs"],
   "options_page": "options.html",
   "options_ui": {
     "page": "options.html",
@@ -22,7 +22,8 @@
         "https://gitpitch.com/*",
         "https://gitlab.com/*",
         "https://bitbucket.org/*",
-        "https://*.backlog.jp/wiki/*"
+        "https://*.backlog.jp/wiki/*",
+        "http://*/gitbucket/*"
       ]
     }
   ]
