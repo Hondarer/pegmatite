@@ -1,6 +1,7 @@
 # Pegmatite-gitbucket - Chrome ext to preview PlantUML in markdown
 
 Pegmatite is Google Chrome extension that replace PlantUML code blocks into preview images.
+
 This version is the original Pegmatite with enhanced GitBucket support.
 
 ## Summary
