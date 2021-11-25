@@ -4,6 +4,8 @@ Pegmatite is Google Chrome extension that replace PlantUML code blocks into prev
 
 This version is the original Pegmatite with enhanced GitBucket support.
 
+[Chrome web store](https://chrome.google.com/webstore/detail/pegmatite-gitbucket/gkdjfofhecooaojkhbohidojebbpcene)
+
 ## Summary
 
 | You will see below               | But we see
