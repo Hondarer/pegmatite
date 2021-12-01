@@ -111,9 +111,6 @@ var siteProfiles = {
 		},
 		"replace": function (elem) {
 			return elem;
-		},
-		"compress": function (elem) {
-			return compress(elem.querySelector("code").textContent.trim());
 		}
 	},
 	"gitpitch.com": {
@@ -123,22 +120,11 @@ var siteProfiles = {
 		},
 		"replace": function (elem) {
 			return elem;
-		},
-		"compress": function (elem) {
-			return compress(elem.innerText.trim());
 		}
 	},
 	"gitlab.com": {
 		"selector": "pre code span.line, div div pre", // markdown, asciidoc
 		"extract": function (elem) {
-			return elem.textContent.trim();
-		},
-		"replace": function (elem) {
-			var child = elem.querySelector("code");
-			if ( child !=null) return child; // markdown
-			return elem; // asciidoc
-		},
-		"compress": function (elem) {
 			var plantuml = "";
 			if (elem.tagName == "SPAN"){ // markdown
 				elem.parentNode.querySelectorAll("span.line").forEach(function(span){
@@ -147,7 +133,12 @@ var siteProfiles = {
 			} else { // asciidoc
 				plantuml = elem.textContent.trim();
 			}
-			return compress(plantuml);
+			return plantuml;
+		},
+		"replace": function (elem) {
+			var child = elem.querySelector("code");
+			if ( child !=null) return child; // markdown
+			return elem; // asciidoc
 		}
 	},
 	"bitbucket.org": {
@@ -157,9 +148,6 @@ var siteProfiles = {
 		},
 		replace: function(elem) {
 			return elem;
-		},
-		compress: function(elem) {
-			return compress(elem.innerText.trim());
 		}
 	},
 	"backlog.jp": {
@@ -179,16 +167,6 @@ var siteProfiles = {
 			var child = elem.querySelector("code");
 			if (child != null) return child; // markdown
 			return elem; // asciidoc
-		},
-		"compress": function (elem) {
-			var plantuml = "";
-			var child = elem.querySelector("code");
-			if (child != null) { // markdown
-				plantuml = elem.querySelector("code").textContent.trim();
-			} else { // asciidoc
-				plantuml = elem.textContent.trim();
-			}
-			return compress(plantuml);
 		}
 	},
 	"gitbucket": {
@@ -198,9 +176,6 @@ var siteProfiles = {
 		},
 		"replace": function (elem) {
 			return elem;
-		},
-		"compress": function (elem) {
-			return compress(elem.innerText.trim());
 		},
 		"autoCompleteStartEnd": true,
 		"disableChangeBackgroundColor": true
@@ -223,12 +198,12 @@ function onLoadAction(siteProfile, baseUrl){
 		var plantuml = siteProfile.extract(umlElem);
 		if (plantuml.substr(0, "@start".length) !== "@start") {
 			if ((siteProfile.autoCompleteStartEnd || false) == true) {
-				plantuml = "@startuml\r\n" + plantuml + "\r\n@enduml";
+				plantuml = "@startuml\n" + plantuml + "\n@enduml";
 			} else {
 				return;
 			}
 		}
-		var plantUmlServerUrl = baseUrl + siteProfile.compress(umlElem);
+		var plantUmlServerUrl = baseUrl + compress(plantuml);
 		var replaceElem = siteProfile.replace(umlElem);
 		var disableChangeBackgroundColor = siteProfile.disableChangeBackgroundColor || false;
 		if (plantUmlServerUrl.lastIndexOf("https", 0) === 0) { // if URL starts with "https"
@@ -261,12 +236,12 @@ function run(config) {
 		var plantuml = siteProfile.extract(umlElem);
 		if (plantuml.substr(0, "@start".length) !== "@start") {
 			if ((siteProfile.autoCompleteStartEnd || false) == true) {
-				plantuml = "@startuml\r\n" + plantuml + "\r\n@enduml";
+				plantuml = "@startuml\n" + plantuml + "\n@enduml";
 			} else {
 				return;
 			}
 		}
-		var plantUmlServerUrl = baseUrl + siteProfile.compress(umlElem);
+		var plantUmlServerUrl = baseUrl + compress(plantuml);
 		var replaceElem = siteProfile.replace(umlElem);
 		var disableChangeBackgroundColor = siteProfile.disableChangeBackgroundColor || false;
 		if (plantUmlServerUrl.lastIndexOf("https", 0) === 0) { // if URL starts with "https"

@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Pegmatite-gitbucket",
-  "version": "1.6.1",
+  "version": "1.6.2",
   "description": "Shows graphs and diagrams rendered by PlantUML.",
   "permissions": ["storage", "https://*/*", "http://*/*", "tabs"],
   "options_page": "options.html",
