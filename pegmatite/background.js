@@ -1,45 +1,25 @@
 /* global chrome */
 /* global Uint8Array */
 
-function fechImageDataUri(uri, callback) {
-	fetchImage(uri, function() {
-		var contentType = this.getResponseHeader("Content-Type");
-		var unicode = toUnicodeString(this.response);
-		var base64 = encodeBase64(unicode);
-		var dataUri = "data:" + contentType + ";base64," + base64;
-		callback(dataUri);
-	});
-}
-
-function fetchImage(uri, callback) {
-	var xhr = new XMLHttpRequest();
-	xhr.open("GET", uri, true);
-	xhr.responseType = "arraybuffer";
-	xhr.onload = callback;
-	xhr.send();
-}
-
-function toUnicodeString(arrayBuffer) {
-	var bytes = new Uint8Array(arrayBuffer);
-	var binaryString = "";
-	for(var i = 0; i < bytes.byteLength; i++) {
+async function fetchImageDataUri(uri) {
+	const response = await fetch(uri);
+	const contentType = response.headers.get("Content-Type");
+	const buffer = await response.arrayBuffer();
+	const bytes = new Uint8Array(buffer);
+	let binaryString = "";
+	for (let i = 0; i < bytes.byteLength; i++) {
 		binaryString += String.fromCharCode(bytes[i]);
 	}
-	return binaryString;
+	const base64 = btoa(binaryString);
+	return "data:" + contentType + ";base64," + base64;
 }
 
-function encodeBase64(string) {
-	return window.btoa(string);
-}
-
-function onMessage(message, sender, callback) {
-	if(message.action == "plantuml") {
-		fechImageDataUri(message.url, callback);
+chrome.runtime.onMessage.addListener(function (message, sender, sendResponse) {
+	if (message.action == "plantuml") {
+		fetchImageDataUri(message.url).then(sendResponse);
+		return true;
 	}
-	return true;
-}
-
-chrome.runtime.onMessage.addListener(onMessage);
+});
 
 var matches = new RegExp(
 	"^" + chrome.runtime.getManifest()
@@ -51,14 +31,11 @@ var matches = new RegExp(
 
 chrome.tabs.onUpdated.addListener(function (tabId, changeInfo, tab) {
 	if (changeInfo.status === "complete") {
-		if (tab.url.match(matches)) {
-			chrome.tabs.executeScript(tab.id, {
-				file: "rawdeflate.js"
-			}, function() {
-				chrome.tabs.executeScript(tab.id, {
-					file: "content-script.js"
-				}, chrome.runtime.lastError);
-			});
+		if (tab.url && tab.url.match(matches)) {
+			chrome.scripting.executeScript({
+				target: { tabId: tab.id },
+				files: ["rawdeflate.js", "content-script.js"]
+			}).catch(function () { /* インジェクト不可 URL は黙殺 */ });
 		}
 	}
 });
