@@ -223,6 +223,9 @@ function run(config) {
 	if (window.location.pathname.substr(0, "/gitbucket".length) == "/gitbucket") {
 		hostname = "gitbucket";
 	}
+	else if (window.location.pathname.substr(0, "/gitlab".length) == "/gitlab") {
+		hostname = "gitlab.com";
+	}
 	else {
 		hostname = window.location.hostname.split(".").slice(-2).join(".");
 	}
