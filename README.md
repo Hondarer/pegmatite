@@ -20,6 +20,7 @@ This version is the original Pegmatite with enhanced GitBucket support.
     * `https://bitbucket.org/*`
     * `https://*.backlog.jp/wiki/*`
     * `http://*/gitbucket/*`
+    * `http://*/gitlab/*`
 * Replace only code block with lang `uml` and starts with `@start`.
     * lang `puml` or `plantuml` is also supported.
     * Depending on per-site profile, can enable auto-completion when `@startuml` is omitted.

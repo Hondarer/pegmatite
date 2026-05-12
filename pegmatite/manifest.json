@@ -1,17 +1,16 @@
 {
-  "manifest_version": 2,
+  "manifest_version": 3,
   "name": "Pegmatite-gitbucket",
-  "version": "1.6.2",
+  "version": "1.7.0",
   "description": "Shows graphs and diagrams rendered by PlantUML.",
-  "permissions": ["storage", "https://*/*", "http://*/*", "tabs"],
+  "permissions": ["storage", "tabs", "scripting"],
+  "host_permissions": ["https://*/*", "http://*/*"],
   "options_page": "options.html",
   "options_ui": {
-    "page": "options.html",
-    "chrome_style": true
+    "page": "options.html"
   },
   "background": {
-    "scripts": ["background.js"],
-    "persistent": false
+    "service_worker": "background.js"
   },
   "content_scripts": [
     {
@@ -23,7 +22,8 @@
         "https://gitlab.com/*",
         "https://bitbucket.org/*",
         "https://*.backlog.jp/wiki/*",
-        "http://*/gitbucket/*"
+        "http://*/gitbucket/*",
+        "http://*/gitlab/*"
       ]
     }
   ]
