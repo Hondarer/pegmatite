@@ -19,6 +19,8 @@ This version is the original Pegmatite with enhanced GitBucket support.
     * `https://gitlab.com/*`
     * `https://bitbucket.org/*`
     * `https://*.backlog.jp/wiki/*`
+    * `https://*/gitbucket/*`
+    * `https://*/gitlab/*`
     * `http://*/gitbucket/*`
     * `http://*/gitlab/*`
 * Replace only code block with lang `uml` and starts with `@start`.
