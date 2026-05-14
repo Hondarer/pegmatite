@@ -100,16 +100,45 @@ Examples.
 * `https://www.plantuml.com/plantuml/svg/`
 * `https://any-plantuml-server.example.com:8080/img/`
 
-Also you can run PlantUML server in localhost using Docker as following command:
+## Running a local PlantUML server (for confidential diagrams)
+
+If your UML diagrams contain sensitive or confidential information, you can run a PlantUML server locally so that diagram source is never sent to an external host.
+
+### Option 1: Docker
 
 ```
-$ docker run -d -p 8080:8080 plantuml/plantuml-server
+docker run -d -p 8080:8080 plantuml/plantuml-server
 ```
 
-And you can specify `http://localhost:8080/img/` as *Base URL*.
+Set *Base URL* to:
 
-Note: To avoid mixed-content, if the *Base URL* is not HTTPS scheme,
-generated image is converted to [DATA URI](https://tools.ietf.org/html/rfc2397).
+```
+http://localhost:8080/img/
+```
+
+### Option 2: Java + plantuml.jar
+
+If you have Java installed, download `plantuml.jar` from the [PlantUML releases page](https://github.com/plantuml/plantuml/releases) and start the built-in web server with the `-picoweb` option:
+
+```
+java -jar plantuml.jar -picoweb:8080
+```
+
+Set *Base URL* to:
+
+```
+http://localhost:8080/plantuml/img/
+```
+
+### Configuring Pegmatite to use the local server
+
+1. Click the Pegmatite extension icon in the Chrome toolbar and open **Options**.
+2. Enter the *Base URL* shown above for your chosen method.
+3. Click **Save**.
+
+Pegmatite will now render all diagrams using your local server without any external network requests.
+
+> **Note:** To avoid mixed-content errors, when *Base URL* is HTTP (not HTTPS), the generated image is automatically converted to a [DATA URI](https://tools.ietf.org/html/rfc2397) internally.
 
 ## Contribution
 
