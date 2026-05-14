@@ -123,7 +123,7 @@ var siteProfiles = {
 		}
 	},
 	"gitlab.com": {
-		"selector": "pre code span.line, div div pre", // markdown, asciidoc
+		"selector": "pre[data-canonical-lang='uml'] code span.line, pre[data-canonical-lang='puml'] code span.line, pre[data-canonical-lang='plantuml'] code span.line, code.language-uml span.line, code.language-puml span.line, code.language-plantuml span.line, div div pre", // markdown, asciidoc
 		"extract": function (elem) {
 			var plantuml = "";
 			if (elem.tagName == "SPAN"){ // markdown
