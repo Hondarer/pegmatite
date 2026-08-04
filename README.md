@@ -86,6 +86,34 @@ bar
 baz
 ```
 
+## Testing locally in Microsoft Edge
+
+Pegmatite is a Manifest V3 extension and does not require a build step for local testing.
+
+1. Open `edge://extensions` in Microsoft Edge.
+2. Enable **Developer mode**.
+3. Click **Load unpacked**.
+4. Select the `pegmatite` directory that contains `manifest.json`.
+5. Open or reload a supported GitLab page containing a PlantUML code block.
+
+After changing the source code, click **Reload** on the Pegmatite extension card and then
+reload the GitLab tab. Confirm that:
+
+* `uml`, `puml`, and `plantuml` code blocks are replaced with diagram images.
+* Empty lines and indentation are preserved in the rendered diagram.
+* Double-clicking switches between the original code block and the diagram image.
+
+If the extension does not run:
+
+1. Check the Pegmatite extension card for errors.
+2. Open the extension's **Service worker** link and inspect its DevTools console.
+3. Inspect the GitLab page's DevTools console.
+4. Confirm that the page URL matches one of the URL patterns in `pegmatite/manifest.json`.
+5. If using a local PlantUML server, confirm the **Base URL** described below.
+
+`prompt/dump.html` cannot be used for the final browser check because `file://` URLs are
+not included in the extension's URL patterns. Use an actual supported GitLab URL.
+
 ## Using another PlantUML server
 
 By default, Pegmatite uses [PlantUML server](https://github.com/plantuml/plantuml-server)
@@ -139,6 +167,12 @@ http://localhost:8080/plantuml/img/
 Pegmatite will now render all diagrams using your local server without any external network requests.
 
 > **Note:** To avoid mixed-content errors, when *Base URL* is HTTP (not HTTPS), the generated image is automatically converted to a [DATA URI](https://tools.ietf.org/html/rfc2397) internally.
+
+## Privacy
+
+Pegmatite reads PlantUML source from supported code blocks and sends the compressed source to a PlantUML rendering server to generate diagram images. By default it uses `https://www.plantuml.com/plantuml/img/`; you can select another server in the extension options. The selected Base URL is stored locally by Chrome.
+
+The extension developer does not collect or retain diagram source, browsing history, or the configured Base URL. The rendering server receives the diagram source as part of the image request and may process request logs under that server operator's own policy. See [PRIVACY.md](PRIVACY.md) for details.
 
 ## Contribution
 

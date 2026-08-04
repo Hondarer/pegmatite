@@ -123,22 +123,50 @@ var siteProfiles = {
 		}
 	},
 	"gitlab.com": {
-		"selector": "pre[data-canonical-lang='uml'] code span.line, pre[data-canonical-lang='puml'] code span.line, pre[data-canonical-lang='plantuml'] code span.line, code.language-uml span.line, code.language-puml span.line, code.language-plantuml span.line, div div pre", // markdown, asciidoc
+		// DOM structure: <pre data-canonical-lang="plantuml"><code><span class="line">...</span></code></pre>
+		// Select the code element (not individual span.line) to avoid duplicate extraction per line.
+		// GitLab 12-15 (self-hosted): may use pre[lang=...] or pre[data-lang=...] instead
+		// asciidoc: div div pre
+		"selector": [
+			"pre[data-canonical-lang='uml'] code",
+			"pre[data-canonical-lang='puml'] code",
+			"pre[data-canonical-lang='plantuml'] code",
+			"pre[lang='uml'] code",
+			"pre[lang='puml'] code",
+			"pre[lang='plantuml'] code",
+			"pre[data-lang='uml'] code",
+			"pre[data-lang='puml'] code",
+			"pre[data-lang='plantuml'] code",
+			"code.language-uml",
+			"code.language-puml",
+			"code.language-plantuml",
+			"div div pre"
+		].join(", "),
+		"normalize": function (elem) {
+			if (elem.tagName == "CODE") return elem;
+			var child = elem.querySelector("code");
+			if (child != null) return child;
+			return elem;
+		},
 		"extract": function (elem) {
 			var plantuml = "";
-			if (elem.tagName == "SPAN"){ // markdown
-				elem.parentNode.querySelectorAll("span.line").forEach(function(span){
-					plantuml = plantuml + span.textContent.trim() + "\n";
-				});
-			} else { // asciidoc
+			if (elem.tagName == "CODE") {
+				var lines = elem.querySelectorAll("span.line");
+				if (lines.length > 0) { // GitLab 16+: span.line children
+					lines.forEach(function(span){
+						plantuml = plantuml + span.textContent + "\n";
+					});
+					plantuml = plantuml.trim();
+				} else {
+					plantuml = elem.textContent.trim();
+				}
+			} else { // asciidoc: pre element
 				plantuml = elem.textContent.trim();
 			}
 			return plantuml;
 		},
 		"replace": function (elem) {
-			var child = elem.querySelector("code");
-			if ( child !=null) return child; // markdown
-			return elem; // asciidoc
+			return elem;
 		}
 	},
 	"bitbucket.org": {
@@ -193,8 +221,15 @@ function loop(counter, retry, siteProfile, baseUrl){
 	}
 }
 
+var processedElements = [];
+var processedPlantUml = [];
+
 function onLoadAction(siteProfile, baseUrl){
 	[].forEach.call(document.querySelectorAll(siteProfile.selector), function (umlElem) {
+		if (siteProfile.normalize != null) {
+			umlElem = siteProfile.normalize(umlElem);
+		}
+
 		var plantuml = siteProfile.extract(umlElem);
 		if (plantuml.substr(0, "@start".length) !== "@start") {
 			if ((siteProfile.autoCompleteStartEnd || false) == true) {
@@ -202,6 +237,14 @@ function onLoadAction(siteProfile, baseUrl){
 			} else {
 				return;
 			}
+		}
+		var processedIndex = processedElements.indexOf(umlElem);
+		if (processedIndex >= 0 && processedPlantUml[processedIndex] == plantuml) return;
+		if (processedIndex >= 0) {
+			processedPlantUml[processedIndex] = plantuml;
+		} else {
+			processedElements.push(umlElem);
+			processedPlantUml.push(plantuml);
 		}
 		var plantUmlServerUrl = baseUrl + compress(plantuml);
 		var replaceElem = siteProfile.replace(umlElem);
@@ -214,6 +257,23 @@ function onLoadAction(siteProfile, baseUrl){
 				replaceElement(replaceElem, dataUri, disableChangeBackgroundColor);
 			});
 		}
+	});
+}
+
+function observeGitLab(config) {
+	var siteProfile = siteProfiles["gitlab.com"];
+	var baseUrl = config.baseUrl || "https://www.plantuml.com/plantuml/img/";
+	var timer;
+	var observer = new MutationObserver(function() {
+		clearTimeout(timer);
+		timer = setTimeout(function() {
+			onLoadAction(siteProfile, baseUrl);
+		}, 100);
+	});
+
+	observer.observe(document.body, {
+		childList: true,
+		subtree: true
 	});
 }
 
@@ -234,28 +294,9 @@ function run(config) {
 	var baseUrl = config.baseUrl || "https://www.plantuml.com/plantuml/img/";
 	if (document.querySelector("i[aria-label='Loading content…']")!=null){ // for wait loading @ gitlab.com
 		loop(1, 10, siteProfile, baseUrl);
+		return; // wait for loop to finish before processing
 	}
-	[].forEach.call(document.querySelectorAll(siteProfile.selector), function (umlElem) {
-		var plantuml = siteProfile.extract(umlElem);
-		if (plantuml.substr(0, "@start".length) !== "@start") {
-			if ((siteProfile.autoCompleteStartEnd || false) == true) {
-				plantuml = "@startuml\n" + plantuml + "\n@enduml";
-			} else {
-				return;
-			}
-		}
-		var plantUmlServerUrl = baseUrl + compress(plantuml);
-		var replaceElem = siteProfile.replace(umlElem);
-		var disableChangeBackgroundColor = siteProfile.disableChangeBackgroundColor || false;
-		if (plantUmlServerUrl.lastIndexOf("https", 0) === 0) { // if URL starts with "https"
-			replaceElement(replaceElem, plantUmlServerUrl, disableChangeBackgroundColor);
-		} else {
-			// to avoid mixed-content
-			chrome.runtime.sendMessage({ "action": "plantuml", "url": plantUmlServerUrl }, function(dataUri) {
-				replaceElement(replaceElem, dataUri, disableChangeBackgroundColor);
-			});
-		}
-	});
+	onLoadAction(siteProfile, baseUrl);
 }
 
 chrome.storage.local.get("baseUrl", function(config) {
@@ -273,6 +314,10 @@ chrome.storage.local.get("baseUrl", function(config) {
 			childList: true,
 			subtree: true
 		});
+	}
+	if (window.location.hostname === "gitlab.com" ||
+		window.location.pathname.substr(0, "/gitlab".length) == "/gitlab") {
+		observeGitLab(config);
 	}
 
 	run(config);

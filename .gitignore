@@ -1,5 +1,6 @@
 pegmatite.crx
 pegmatite.pem
 pegmatite.zip
+pegmatite-*.zip
 /.idea/
 node_modules
