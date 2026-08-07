@@ -7,7 +7,18 @@
     "128": "icon128.png"
   },
   "permissions": ["scripting"],
-  "host_permissions": ["https://*/*", "http://*/*"],
+  "host_permissions": [
+    "https://github.com/*",
+    "https://gist.github.com/*",
+    "https://gitpitch.com/*",
+    "https://gitlab.com/*",
+    "https://bitbucket.org/*",
+    "https://*.backlog.jp/wiki/*",
+    "https://*/gitbucket/*",
+    "https://*/gitlab/*",
+    "http://*/gitbucket/*",
+    "http://*/gitlab/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },

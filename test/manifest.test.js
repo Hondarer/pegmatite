@@ -19,6 +19,14 @@ assert.strictEqual(manifest.permissions.indexOf("tabs"), -1);
 // ローカル描画へ移行したため storage は使わない
 assert.strictEqual(manifest.permissions.indexOf("storage"), -1);
 
+// background.js は content script と同じ対象へ再インジェクトする。両者がずれると
+// executeScript が一部のサイトだけ静かに失敗するため、一致させておく。
+assert.deepStrictEqual(
+	manifest.host_permissions,
+	manifest.content_scripts[0].matches,
+	"host_permissions must match the content script patterns"
+);
+
 // サーバ描画の名残が残っていないこと
 assert.strictEqual(manifest.content_scripts[0].js.indexOf("rawdeflate.js"), -1);
 assert.strictEqual(manifest.options_page, undefined);
