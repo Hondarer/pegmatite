@@ -7,40 +7,159 @@ var fs = require("fs");
 var path = require("path");
 var vm = require("vm");
 
-function loadContentScript() {
+var SCRIPT_PATH = path.join(__dirname, "..", "pegmatite", "content-script.js");
+var SCRIPT_SOURCE = fs.readFileSync(SCRIPT_PATH, "utf8");
+
+function NoopMutationObserver() {
+	this.observe = function () {};
+	this.disconnect = function () {};
+}
+
+// replaceElement は要素の付け替えを行うため、最小限のスタブでは通せない。
+// 必要な範囲だけの DOM の代用を用意する。
+function makeElement(tagName) {
+	var elem = {
+		tagName: tagName,
+		style: {},
+		attributes: {},
+		childNodes: [],
+		listeners: {},
+		parentNode: null,
+		clicked: 0,
+		// 生存判定 (rendererIsAlive、ensureStyle) が真になる状態を模す
+		isConnected: true,
+		contentWindow: { postMessage: function () {} },
+		get firstChild() {
+			return elem.childNodes.length > 0 ? elem.childNodes[0] : null;
+		},
+		setAttribute: function (name, value) {
+			elem.attributes[name] = value;
+		},
+		getAttribute: function (name) {
+			return Object.prototype.hasOwnProperty.call(elem.attributes, name)
+				? elem.attributes[name]
+				: null;
+		},
+		appendChild: function (child) {
+			elem.childNodes.push(child);
+			child.parentNode = elem;
+			return child;
+		},
+		removeChild: function (child) {
+			elem.childNodes.splice(elem.childNodes.indexOf(child), 1);
+			child.parentNode = null;
+			return child;
+		},
+		replaceChild: function (next, prev) {
+			elem.childNodes.splice(elem.childNodes.indexOf(prev), 1, next);
+			prev.parentNode = null;
+			next.parentNode = elem;
+			return prev;
+		},
+		addEventListener: function (type, handler) {
+			if (elem.listeners[type] === undefined) elem.listeners[type] = [];
+			elem.listeners[type].push(handler);
+		},
+		// 利用者の操作を模す
+		dispatch: function (type) {
+			(elem.listeners[type] || []).forEach(function (handler) {
+				handler({
+					preventDefault: function () {},
+					stopPropagation: function () {}
+				});
+			});
+		},
+		cloneNode: function () {
+			return makeElement(tagName);
+		},
+		click: function () {
+			elem.clicked++;
+		}
+	};
+	return elem;
+}
+
+// new URL(...) の解決は本物に任せ、Blob の URL の発行だけを記録できるようにする。
+function makeUrlStub(objectUrls) {
+	var stub = function (input) {
+		return new URL(input);
+	};
+	stub.createObjectURL = function (blob) {
+		objectUrls.push(blob);
+		return "blob:pegmatite/" + objectUrls.length;
+	};
+	stub.revokeObjectURL = function () {};
+	return stub;
+}
+
+function makeContext() {
+	var created = [];
+	var objectUrls = [];
 	var context = {
 		chrome: {
 			runtime: {
-				sendMessage: function () {}
-			},
-			storage: {
-				local: {
-					get: function () {}
+				getURL: function (resource) {
+					return "chrome-extension://pegmatite/" + resource;
 				}
 			}
 		},
 		document: {
+			body: {
+				appendChild: function () {}
+			},
 			querySelector: function () {
 				return null;
 			},
 			querySelectorAll: function () {
 				return [];
+			},
+			documentElement: makeElement("html"),
+			createElement: function (tagName) {
+				var elem = makeElement(tagName);
+				created.push(elem);
+				return elem;
+			},
+			createElementNS: function (namespace, tagName) {
+				var elem = makeElement(tagName);
+				elem.namespace = namespace;
+				return elem;
 			}
 		},
+		URL: makeUrlStub(objectUrls),
+		XMLSerializer: function () {
+			this.serializeToString = function (node) {
+				return "<" + node.tagName + "/>";
+			};
+		},
+		Blob: function (parts, options) {
+			this.parts = parts;
+			this.type = options.type;
+		},
+		MutationObserver: NoopMutationObserver,
 		setTimeout: setTimeout,
 		clearTimeout: clearTimeout
 	};
+	context.objectUrls = objectUrls;
+	context.createdElements = created;
 	context.window = context;
 	context.window.location = {
 		hostname: "gitlab.com",
 		pathname: "/group/project"
 	};
-
-	var scriptPath = path.join(__dirname, "..", "pegmatite", "content-script.js");
-	vm.runInNewContext(fs.readFileSync(scriptPath, "utf8"), context, {
-		filename: scriptPath
-	});
+	context.window.addEventListener = function () {};
+	context.window.matchMedia = function () {
+		return { matches: false };
+	};
 	return context;
+}
+
+function evaluate(context) {
+	vm.runInNewContext(SCRIPT_SOURCE, context, { filename: SCRIPT_PATH });
+	return context;
+}
+
+function loadContentScript() {
+	return evaluate(makeContext());
 }
 
 function testGitLabSelectors(context) {
@@ -54,6 +173,17 @@ function testGitLabSelectors(context) {
 		"code.language-plantuml"
 	].forEach(function (expected) {
 		assert.notStrictEqual(selector.indexOf(expected), -1, expected);
+	});
+}
+
+// onLoadAction は selector/extract/replace を無条件に使う。どれかを欠いたプロファイルは
+// そのサイトで例外になり、図が一切描画されなくなる。
+function testAllProfilesAreComplete(context) {
+	Object.keys(context.siteProfiles).forEach(function (key) {
+		var profile = context.siteProfiles[key];
+		assert.strictEqual(typeof profile.selector, "string", key + ": selector");
+		assert.strictEqual(typeof profile.extract, "function", key + ": extract");
+		assert.strictEqual(typeof profile.replace, "function", key + ": replace");
 	});
 }
 
@@ -112,45 +242,28 @@ function testDuplicateCandidates(context) {
 			return code;
 		}
 	};
-	var compressed = [];
-	var replaced = [];
+	var requested = [];
 
 	context.document.querySelectorAll = function () {
 		return [pre, code];
 	};
-	context.compress = function (plantuml) {
-		compressed.push(plantuml);
-		return "encoded";
-	};
-	context.replaceElement = function (element, url) {
-		replaced.push({ element: element, url: url });
+	context.requestRender = function (plantuml, dark, callback) {
+		requested.push({ source: plantuml, dark: dark, callback: callback });
 	};
 
-	context.onLoadAction(
-		context.siteProfiles["gitlab.com"],
-		"https://www.plantuml.com/plantuml/img/"
-	);
+	context.onLoadAction(context.siteProfiles["gitlab.com"]);
 
-	assert.strictEqual(compressed.length, 1);
-	assert.strictEqual(replaced.length, 1);
-	assert.strictEqual(replaced[0].element, code);
-	assert.strictEqual(
-		replaced[0].url,
-		"https://www.plantuml.com/plantuml/img/encoded"
-	);
+	// pre と code の両方が候補になるが、normalize で同じ code に寄るため描画は 1 回
+	assert.strictEqual(requested.length, 1);
+	assert.strictEqual(requested[0].source, "@startuml\nAlice -> Bob\n@enduml");
 
-	context.onLoadAction(
-		context.siteProfiles["gitlab.com"],
-		"https://www.plantuml.com/plantuml/img/"
-	);
-	assert.strictEqual(replaced.length, 1);
+	context.onLoadAction(context.siteProfiles["gitlab.com"]);
+	assert.strictEqual(requested.length, 1);
 
 	lines[1].textContent = "Alice --> Bob";
-	context.onLoadAction(
-		context.siteProfiles["gitlab.com"],
-		"https://www.plantuml.com/plantuml/img/"
-	);
-	assert.strictEqual(replaced.length, 2);
+	context.onLoadAction(context.siteProfiles["gitlab.com"]);
+	assert.strictEqual(requested.length, 2);
+	assert.strictEqual(requested[1].source, "@startuml\nAlice --> Bob\n@enduml");
 }
 
 function testLoadingDefersConversion(context) {
@@ -167,18 +280,18 @@ function testLoadingDefersConversion(context) {
 		actionCalls++;
 	};
 
-	context.run({});
+	context.run();
 	assert.strictEqual(loopCalls, 1);
 	assert.strictEqual(actionCalls, 0);
 
 	context.document.querySelector = function () {
 		return null;
 	};
-	context.run({});
+	context.run();
 	assert.strictEqual(actionCalls, 1);
 }
 
-function testGitLabDynamicContentObserver(context) {
+function testDynamicContentObserver(context) {
 	var mutationCallback;
 	var observedTarget;
 	var observedOptions;
@@ -191,7 +304,6 @@ function testGitLabDynamicContentObserver(context) {
 			observedOptions = options;
 		};
 	};
-	context.document.body = {};
 	context.setTimeout = function (callback) {
 		callback();
 		return 1;
@@ -201,19 +313,293 @@ function testGitLabDynamicContentObserver(context) {
 		actionCalls++;
 	};
 
-	context.observeGitLab({});
+	context.state.observing = false; // 読み込み時に一度登録済みのため戻す
+	context.observeDocument(context.siteProfiles["gitlab.com"]);
 	assert.strictEqual(observedTarget, context.document.body);
 	assert.strictEqual(observedOptions.childList, true);
 	assert.strictEqual(observedOptions.subtree, true);
 
 	mutationCallback();
 	assert.strictEqual(actionCalls, 1);
+
+	// 二重登録しないこと
+	observedTarget = null;
+	context.observeDocument(context.siteProfiles["gitlab.com"]);
+	assert.strictEqual(observedTarget, null);
+}
+
+// background.js は tabs.onUpdated でも content script を注入するため、同じページで
+// 二重に評価される。描画エンジンを二重に読み込まず、走査だけをやり直せること。
+function testReinjectionKeepsSingleRenderer() {
+	var context = evaluate(makeContext());
+	var firstState = context.state;
+
+	context.ensureRenderer();
+	var iframes = context.createdElements.filter(function (e) {
+		return e.tagName === "iframe";
+	});
+	assert.strictEqual(iframes.length, 1, "iframe は 1 つだけ作られること");
+
+	// 再インジェクトを模して同じスクリプトをもう一度評価する
+	evaluate(context);
+
+	assert.strictEqual(context.state, firstState, "状態が引き継がれること");
+	assert.strictEqual(context.window.pegmatiteState, firstState);
+
+	context.ensureRenderer();
+	iframes = context.createdElements.filter(function (e) {
+		return e.tagName === "iframe";
+	});
+	assert.strictEqual(iframes.length, 1, "再インジェクトで iframe が増えないこと");
+}
+
+// GitHub は body を整理する際に描画用 iframe を取り除く。取り除かれたら作り直し、
+// 応答待ちだった要求を新しい iframe へ送り直すこと。
+function testDetachedRendererIsRecreated() {
+	var context = evaluate(makeContext());
+
+	context.requestRender("@startuml\nA -> B\n@enduml", false, function () {});
+	var first = context.state.frame;
+	assert.strictEqual(context.state.inFlight["pegmatite-1"].message.source,
+		"@startuml\nA -> B\n@enduml");
+
+	// 取り除かれた状態を模す
+	first.isConnected = false;
+	assert.strictEqual(context.rendererIsAlive(), false);
+
+	context.requestRender("@startuml\nC -> D\n@enduml", false, function () {});
+
+	var iframes = context.createdElements.filter(function (e) {
+		return e.tagName === "iframe";
+	});
+	assert.strictEqual(iframes.length, 2, "取り除かれたら作り直すこと");
+	assert.notStrictEqual(context.state.frame, first);
+	assert.strictEqual(context.state.ready, false, "新しい iframe の準備待ちに戻すこと");
+
+	// vm コンテキスト側の配列は prototype が異なるため、ホスト側に組み直して比べる
+	var queued = [];
+	context.state.pending.forEach(function (m) { queued.push(m.source); });
+	queued.sort();
+	assert.deepStrictEqual(queued,
+		["@startuml\nA -> B\n@enduml", "@startuml\nC -> D\n@enduml"].sort(),
+		"未応答の要求を送り直すこと");
+}
+
+// 同じソースの描き直しではエンジンを呼ばず、保持した SVG を返すこと。
+// 明暗で結果が変わるため、キャッシュはテーマまで含めて分けること。
+function testSvgCache() {
+	var context = evaluate(makeContext());
+	var sent = 0;
+	context.ensureRenderer = function () { sent++; };
+
+	context.state.svgCache["dark:@startuml\nA -> B\n@enduml"] = "<svg/>";
+	var got = null;
+	context.requestRender("@startuml\nA -> B\n@enduml", true, function (error, svg) {
+		got = { error: error, svg: svg };
+	});
+
+	assert.strictEqual(sent, 0, "キャッシュ命中時はエンジンを起動しないこと");
+	assert.deepStrictEqual(got, { error: null, svg: "<svg/>" });
+
+	context.requestRender("@startuml\nA -> B\n@enduml", false, function () {});
+	assert.strictEqual(sent, 1, "テーマが違えば描き直すこと");
+}
+
+// 図とソースを入れ替えても操作のアイコンが残るよう、両者を 1 つの要素で包むこと
+function placeDiagram(context, plantuml) {
+	var parent = makeElement("div");
+	var umlElem = makeElement("pre");
+	var svgElem = makeElement("svg");
+	parent.appendChild(umlElem);
+
+	context.replaceElement(umlElem, svgElem,
+		plantuml || "@startuml\nA -> B\n@enduml", true);
+
+	var blockElem = parent.childNodes[0];
+	return {
+		parent: parent,
+		umlElem: umlElem,
+		svgElem: svgElem,
+		blockElem: blockElem,
+		toolbarElem: blockElem.childNodes[0],
+		diagramElem: blockElem.childNodes[1]
+	};
+}
+
+function testHoverToolbar() {
+	var context = evaluate(makeContext());
+	var placed = placeDiagram(context);
+
+	assert.strictEqual(placed.blockElem.className, "pegmatite-block");
+	assert.strictEqual(placed.toolbarElem.className, "pegmatite-toolbar");
+	assert.strictEqual(placed.toolbarElem.childNodes.length, 2,
+		"切り替えと保存のアイコンを置くこと");
+	assert.strictEqual(placed.diagramElem.className, "pegmatite-diagram");
+	assert.strictEqual(placed.diagramElem.childNodes[0], placed.svgElem);
+	assert.strictEqual(placed.umlElem.parentNode, null,
+		"図を表示している間はコードブロックを外すこと");
+
+	// ホバーでの表示は CSS で行うため、スタイルが 1 度だけ入ること
+	assert.notStrictEqual(context.state.styleElem, null);
+	var styleElem = context.state.styleElem;
+	placeDiagram(context);
+	assert.strictEqual(context.state.styleElem, styleElem);
+}
+
+function testToggleButton() {
+	var context = evaluate(makeContext());
+	var placed = placeDiagram(context);
+	var toggleButton = placed.toolbarElem.childNodes[0];
+
+	assert.strictEqual(toggleButton.getAttribute("aria-label"), "ソースを表示");
+
+	toggleButton.dispatch("click");
+	assert.strictEqual(placed.blockElem.childNodes[1], placed.umlElem);
+	assert.strictEqual(toggleButton.getAttribute("aria-label"), "図を表示");
+	assert.strictEqual(toggleButton.childNodes.length, 1, "アイコンを入れ替えること");
+
+	toggleButton.dispatch("click");
+	assert.strictEqual(placed.blockElem.childNodes[1], placed.diagramElem);
+	assert.strictEqual(toggleButton.getAttribute("aria-label"), "ソースを表示");
+}
+
+// 表示している内容に関わらず、図を SVG のファイルとして保存できること。
+// 保存するファイルは、画面がダークテーマでも常にライトテーマで描き直すこと。
+function testDownloadButton() {
+	var context = evaluate(makeContext());
+	context.window.matchMedia = function () {
+		return { matches: true }; // ダークテーマで表示している状態
+	};
+	context.sanitizeSvg = function () {
+		return makeElement("svg");
+	};
+
+	var source = "@startuml\nA -> B\n@enduml";
+	context.state.svgCache["light:" + source] = "<svg/>";
+	var placed = placeDiagram(context, source);
+	var downloadButton = placed.toolbarElem.childNodes[1];
+
+	assert.strictEqual(downloadButton.getAttribute("aria-label"), "SVG をダウンロード");
+
+	downloadButton.dispatch("click");
+	assert.strictEqual(context.objectUrls.length, 1,
+		"ライトテーマの描画結果を保存すること");
+	assert.strictEqual(context.objectUrls[0].type, "image/svg+xml");
+	assert.strictEqual(context.state.seq, 0, "ダークテーマでは描き直さないこと");
+
+	var links = context.createdElements.filter(function (e) {
+		return e.tagName === "a";
+	});
+	assert.strictEqual(links.length, 1);
+	assert.strictEqual(links[0].download, "plantuml-1.svg");
+	assert.strictEqual(links[0].clicked, 1);
+	assert.strictEqual(links[0].parentNode, null, "保存したら取り除くこと");
+
+	// ソースを表示している状態でも同じように保存できること
+	placed.toolbarElem.childNodes[0].dispatch("click");
+	downloadButton.dispatch("click");
+	assert.strictEqual(context.objectUrls.length, 2);
+}
+
+// ファイル名は caption、title、@start のパラメータの順に採り、どれもなければ連番を使うこと
+function testDiagramFileName(context) {
+	assert.strictEqual(
+		context.getDiagramFileName(
+			"@startuml 開始名\ncaption 認証の流れ\ntitle 表題\nA -> B\n@enduml", 3),
+		"認証の流れ.svg",
+		"caption を最優先すること");
+	assert.strictEqual(
+		context.getDiagramFileName("@startuml 開始名\ntitle 表題\nA -> B\n@enduml", 3),
+		"表題.svg",
+		"caption がなければ title を使うこと");
+	assert.strictEqual(
+		context.getDiagramFileName("@startmindmap 構成図\n* root\n@endmindmap", 3),
+		"構成図.svg",
+		"caption も title もなければ @start のパラメータを使うこと");
+	assert.strictEqual(
+		context.getDiagramFileName("@startuml diagram.png\nA -> B\n@enduml", 3),
+		"diagram.svg",
+		"@start のパラメータの拡張子を残さないこと");
+	assert.strictEqual(
+		context.getDiagramFileName("@startuml\n\tcaption  Login   flow \nA -> B\n@enduml", 3),
+		"Login flow.svg");
+	assert.strictEqual(
+		context.getDiagramFileName("@startuml\ncaption a/b:c*d?\n@enduml", 3),
+		"abcd.svg",
+		"ファイル名に使えない文字を取り除くこと");
+	assert.strictEqual(
+		context.getDiagramFileName("@startuml\nA -> B\n@enduml", 3),
+		"plantuml-3.svg",
+		"どれもなければ連番を使うこと");
+	assert.strictEqual(
+		context.getDiagramFileName("@startuml\ncaption ///\n@enduml", 3),
+		"plantuml-3.svg",
+		"取り除いた結果が空になる場合も連番を使うこと");
+}
+
+// sanitizeNode は DOM の一部の API しか使わないため、最小限のスタブで検証できる。
+// sanitizeSvg 全体は DOMParser を要するのでブラウザでの動作確認に委ねる。
+function node(name, attributes, children) {
+	var self = {
+		nodeName: name,
+		children: children || [],
+		attributes: [],
+		removeChild: function (child) {
+			self.children.splice(self.children.indexOf(child), 1);
+		},
+		removeAttributeNode: function (attr) {
+			self.attributes.splice(self.attributes.indexOf(attr), 1);
+		}
+	};
+	Object.keys(attributes || {}).forEach(function (key) {
+		self.attributes.push({ name: key, value: attributes[key] });
+	});
+	return self;
+}
+
+function attributeNames(elem) {
+	return elem.attributes.map(function (attr) {
+		return attr.name;
+	});
+}
+
+// 描画結果はページ側のソースに由来するため、無検査に取り込まない
+function testSanitizeNode(context) {
+	var scriptElem = node("script", {});
+	var foreignElem = node("foreignObject", {});
+	var badLink = node("a", { "xlink:href": "javascript:alert(1)" });
+	var goodLink = node("a", { "xlink:href": "https://example.com/" });
+	var anchorLink = node("a", { "href": "#page1" });
+	var root = node("svg", { "onload": "alert(1)", "width": "100" },
+		[scriptElem, foreignElem, badLink, goodLink, anchorLink]);
+
+	context.sanitizeNode(root);
+
+	assert.deepStrictEqual(root.children, [badLink, goodLink, anchorLink],
+		"script と foreignObject を取り除くこと");
+	assert.deepStrictEqual(attributeNames(root), ["width"],
+		"on* 属性を取り除き、その他は残すこと");
+	assert.deepStrictEqual(attributeNames(badLink), [],
+		"javascript: のリンクを取り除くこと");
+	assert.deepStrictEqual(attributeNames(goodLink), ["xlink:href"],
+		"https のリンクを残すこと");
+	assert.deepStrictEqual(attributeNames(anchorLink), ["href"],
+		"ページ内リンクを残すこと");
 }
 
 var context = loadContentScript();
+testAllProfilesAreComplete(context);
 testGitLabSelectors(context);
 testGitLabLineExtraction(context);
 testGitLabFallbackExtraction(context);
 testDuplicateCandidates(context);
 testLoadingDefersConversion(context);
-testGitLabDynamicContentObserver(context);
+testDynamicContentObserver(context);
+testSanitizeNode(context);
+testHoverToolbar();
+testToggleButton();
+testDownloadButton();
+testDiagramFileName(context);
+testReinjectionKeepsSingleRenderer();
+testDetachedRendererIsRecreated();
+testSvgCache();

@@ -4,3 +4,4 @@ pegmatite.zip
 pegmatite-*.zip
 /.idea/
 node_modules
+pegmatite/vendor/

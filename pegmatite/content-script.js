@@ -1,50 +1,201 @@
 /* global chrome */
 
-function encode64(data) {
-	for (var r = "", i = 0, n = data.length; i < n; i += 3) {
-		r += append3bytes(
-			data.charCodeAt(i),
-			i + 1 !== n ? data.charCodeAt(i + 1) : 0,
-			i + 2 !== n ? data.charCodeAt(i + 2) : 0);
+// 描画は拡張内の renderer.html (不可視 iframe) が行う。
+// WebAssembly のコンパイルには wasm-unsafe-eval を許す CSP が要るが、これは拡張ページに
+// しか適用できないため、content script から描画エンジンを直接呼ぶことはできない。
+
+var RENDERER_PATH = "renderer.html";
+var RENDERER_LOAD_TIMEOUT_MS = 30000;
+
+// content script は manifest の宣言と background.js の再インジェクトの両方から入るため、
+// 二重に評価されうる。そのたびに var が初期化されると描画エンジンを何枚も読み込んでしまうので、
+// 状態は分離ワールドの window に置いて引き継ぐ。走査自体は何度でも行えるようにしておく。
+// GitHub は本文を React が後から描画するため、初回の走査だけでは対象を拾えない。
+var state = window.pegmatiteState = window.pegmatiteState || {
+	"frame": null,
+	"origin": null,
+	"ready": false,
+	"pending": [],
+	"inFlight": {},
+	"seq": 0,
+	"loadTimer": null,
+	"processedElements": [],
+	"processedPlantUml": [],
+	"svgCache": {},
+	"observing": false,
+	"bitbucketObserving": false,
+	"listening": false,
+	"codePre": null,
+	"styleElem": null,
+	"blockSeq": 0
+};
+
+function getRendererOrigin() {
+	if (state.origin === null) {
+		state.origin = new URL(chrome.runtime.getURL(RENDERER_PATH)).origin;
 	}
-	return r;
+	return state.origin;
 }
 
-function append3bytes(b1, b2, b3) {
-	var c1 = b1 >> 2;
-	var c2 = ((b1 & 0x3) << 4) | (b2 >> 4);
-	var c3 = ((b2 & 0xF) << 2) | (b3 >> 6);
-	var c4 = b3 & 0x3F;
-	return encode6bit(c1 & 0x3F) +
-		encode6bit(c2 & 0x3F) +
-		encode6bit(c3 & 0x3F) +
-		encode6bit(c4 & 0x3F);
+function isDarkMode() {
+	return !!(window.matchMedia &&
+		window.matchMedia("(prefers-color-scheme: dark)").matches);
 }
 
-function encode6bit(b) {
-	if (b < 10) return String.fromCharCode(48 + b);
-	b -= 10;
-	if (b < 26) return String.fromCharCode(65 + b);
-	b -= 26;
-	if (b < 26) return String.fromCharCode(97 + b);
-	b -= 26;
-	if (b === 0) return "-";
-	if (b === 1) return "_";
-	return "?";
+function handleRendererMessage(event) {
+	if (event.origin !== getRendererOrigin()) return;
+	var data = event.data;
+	if (!data) return;
+
+	if (data.type === "PLANTUML_READY") {
+		state.ready = true;
+		clearTimeout(state.loadTimer);
+		flushRequests();
+		return;
+	}
+
+	var entry = state.inFlight[data.requestId];
+	if (!entry) return;
+	delete state.inFlight[data.requestId];
+
+	if (data.type === "PLANTUML_RESULT") {
+		state.svgCache[entry.cacheKey] = data.svg;
+		entry.callback(null, data.svg);
+	} else if (data.type === "PLANTUML_ERROR") {
+		entry.callback(data.error || "描画に失敗しました。", null);
+	}
 }
 
-function compress(s) {
-	s = unescape(encodeURIComponent(s));
-	return encode64(window.RawDeflate.deflate(s));
+function rendererIsAlive() {
+	return state.frame !== null &&
+		state.frame.isConnected === true &&
+		state.frame.contentWindow !== null;
 }
 
-function escapeHtml(text) {
-	return text
-		.replace(/&/g, "&amp;")
-		.replace(/</g, "&lt;")
-		.replace(/>/g, "&gt;")
-		.replace(/"/g, "&quot;")
-		.replace(/'/g, "&#039;");
+// 描画対象が実際に見つかったときだけ iframe を作る。
+// エンジンは 8MB を超えるため、図のないページでは読み込まない。
+//
+// iframe は document.body ではなく documentElement に付ける。GitHub は body の
+// 子要素を整理する際に、身に覚えのない要素として取り除いてしまう。
+// それでも取り除かれた場合は作り直し、応答待ちだった要求を送り直す。
+function ensureRenderer() {
+	if (rendererIsAlive()) return;
+
+	if (!state.listening) {
+		state.listening = true;
+		window.addEventListener("message", handleRendererMessage);
+	}
+
+	clearTimeout(state.loadTimer);
+	state.ready = false;
+	state.frame = document.createElement("iframe");
+	state.frame.src = chrome.runtime.getURL(RENDERER_PATH);
+	state.frame.setAttribute("aria-hidden", "true");
+	state.frame.style.cssText =
+		"position:absolute;left:-9999px;top:0;width:0;height:0;border:0;visibility:hidden;";
+	document.documentElement.appendChild(state.frame);
+
+	// 送信済みで未応答の要求は失われるため、新しい iframe へ送り直す。
+	state.pending = Object.keys(state.inFlight).map(function (requestId) {
+		return state.inFlight[requestId].message;
+	});
+
+	// iframe が読み込めないと応答が永久に来ないため、待ち続けずに理由を出す。
+	state.loadTimer = setTimeout(function () {
+		if (state.ready) return;
+		failAllRequests("描画エンジンを読み込めませんでした。");
+	}, RENDERER_LOAD_TIMEOUT_MS);
+}
+
+function failAllRequests(message) {
+	state.pending.length = 0;
+	Object.keys(state.inFlight).forEach(function (requestId) {
+		var entry = state.inFlight[requestId];
+		delete state.inFlight[requestId];
+		entry.callback(message, null);
+	});
+}
+
+function flushRequests() {
+	if (!state.ready || !rendererIsAlive()) return;
+	while (state.pending.length > 0) {
+		state.frame.contentWindow.postMessage(
+			state.pending.shift(), getRendererOrigin());
+	}
+}
+
+// 同じソースでも明暗で結果が変わるため、キャッシュはテーマまで含めて分ける。
+function cacheKeyOf(plantuml, dark) {
+	return (dark ? "dark:" : "light:") + plantuml;
+}
+
+function requestRender(plantuml, dark, callback) {
+	// 同じソースを描き直す場合はエンジンを呼ばない。ページ側が要素を差し替えても
+	// 描画コストが積み上がらないようにする。
+	var cacheKey = cacheKeyOf(plantuml, dark);
+	if (Object.prototype.hasOwnProperty.call(state.svgCache, cacheKey)) {
+		callback(null, state.svgCache[cacheKey]);
+		return;
+	}
+
+	state.seq++;
+	var requestId = "pegmatite-" + state.seq;
+	var message = {
+		"type": "PLANTUML_RENDER",
+		"requestId": requestId,
+		"source": plantuml,
+		"options": { "dark": dark }
+	};
+	state.inFlight[requestId] = {
+		"cacheKey": cacheKey,
+		"callback": callback,
+		"message": message
+	};
+	state.pending.push(message);
+
+	// ensureRenderer は取り除かれた iframe を作り直す際に pending を組み直すため、
+	// 今回の要求を inFlight に入れてから呼ぶ。
+	ensureRenderer();
+	flushRequests();
+}
+
+var SVG_ALLOWED_LINK = /^(https?:|mailto:|#)/i;
+
+// 描画結果はページ側のソースに由来する内容を含むため、無検査に取り込まない。
+// 解析に失敗したときは null を返す。
+function sanitizeSvg(svgText) {
+	var doc = new DOMParser().parseFromString(svgText, "image/svg+xml");
+	if (doc.getElementsByTagName("parsererror").length > 0) return null;
+
+	var root = doc.documentElement;
+	if (root === null || root.nodeName.toLowerCase() !== "svg") return null;
+
+	sanitizeNode(root);
+	return document.importNode(root, true);
+}
+
+function sanitizeNode(node) {
+	[].slice.call(node.children).forEach(function (child) {
+		var name = child.nodeName.toLowerCase();
+		if (name === "script" || name === "foreignobject") {
+			node.removeChild(child);
+			return;
+		}
+		sanitizeNode(child);
+	});
+
+	[].slice.call(node.attributes).forEach(function (attr) {
+		var name = attr.name.toLowerCase();
+		if (name.indexOf("on") === 0) {
+			node.removeAttributeNode(attr);
+			return;
+		}
+		if (name === "href" || name === "xlink:href") {
+			if (!SVG_ALLOWED_LINK.test(attr.value.trim())) {
+				node.removeAttributeNode(attr);
+			}
+		}
+	});
 }
 
 function getBackgroundColor(element, pseudoElt) {
@@ -69,7 +220,14 @@ function CodePre(nodeList) {
 	}
 }
 
-var codePre = new CodePre(document.querySelectorAll(".markdown-body pre")); // github style
+// GitHub では content script が走る時点で本文がまだ描画されておらず、読み込み時に数えると
+// 常に 0 件になる。対象が見つかった時点で初めて調べる。
+function getCodePre() {
+	if (state.codePre === null) {
+		state.codePre = new CodePre(document.querySelectorAll(".markdown-body pre")); // github style
+	}
+	return state.codePre;
+}
 
 function changeBackgroundColor(element, color, exist) {
 	if (exist) {
@@ -77,30 +235,230 @@ function changeBackgroundColor(element, color, exist) {
 	}
 }
 
-function replaceElement(umlElem, srcUrl, disableChangeBackgroundColor = false) {
-	var parent = umlElem.parentNode;
-	if (parent !== null) { // for asciidoc (div div pre)
-		var imgElem = document.createElement("img");
-		imgElem.setAttribute("src", escapeHtml(srcUrl));
-		imgElem.setAttribute("title", "");
-		parent.replaceChild(imgElem, umlElem);
-		if (!disableChangeBackgroundColor) {
-			changeBackgroundColor(parent, codePre.parentColor, codePre.exist);
-		}
+// アイコンの表示と非表示は :hover と :focus-within で切り替えるため、インラインスタイルでは
+// 足りない。クラス名はすべて pegmatite- で始めて、ページ側の CSS と衝突しないようにする。
+var STYLE_TEXT = [
+	".pegmatite-block { position: relative; }",
+	".pegmatite-toolbar {",
+	"	position: absolute; top: 4px; right: 4px; z-index: 2;",
+	"	display: flex; gap: 4px;",
+	"	opacity: 0; transition: opacity 0.12s;",
+	"}",
+	".pegmatite-block:hover .pegmatite-toolbar,",
+	".pegmatite-block:focus-within .pegmatite-toolbar { opacity: 1; }",
+	".pegmatite-button {",
+	"	display: inline-flex; align-items: center; justify-content: center;",
+	"	width: 28px; height: 28px; padding: 0; margin: 0; line-height: 0;",
+	"	border: 1px solid rgba(128, 128, 128, 0.4); border-radius: 6px;",
+	"	background-color: rgba(255, 255, 255, 0.85); color: #24292f;",
+	"	cursor: pointer;",
+	"}",
+	".pegmatite-button:hover { background-color: rgb(255, 255, 255); }",
+	"@media (prefers-color-scheme: dark) {",
+	"	.pegmatite-button {",
+	"		background-color: rgba(32, 36, 42, 0.85); color: #e6edf3;",
+	"	}",
+	"	.pegmatite-button:hover { background-color: rgb(32, 36, 42); }",
+	"}"
+].join("\n");
 
-		imgElem.ondblclick = function() {
-			parent.replaceChild(umlElem, imgElem);
-			if (!disableChangeBackgroundColor) {
-				changeBackgroundColor(parent, codePre.selfColor, codePre.exist);
-			}
-		};
-		umlElem.ondblclick = function() {
-			parent.replaceChild(imgElem, umlElem);
-			if (!disableChangeBackgroundColor) {
-				changeBackgroundColor(parent, codePre.parentColor, codePre.exist);
-			}
-		};
+// ページ側に取り除かれることがあるため、描画エンジンの iframe と同じく生存を見て作り直す。
+function ensureStyle() {
+	if (state.styleElem != null && state.styleElem.isConnected === true) return;
+	var styleElem = document.createElement("style");
+	styleElem.textContent = STYLE_TEXT;
+	(document.head || document.documentElement).appendChild(styleElem);
+	state.styleElem = styleElem;
+}
+
+var SVG_NS = "http://www.w3.org/2000/svg";
+var ICON_SOURCE = ["M9.5 7 L5 12 L9.5 17", "M14.5 7 L19 12 L14.5 17"];
+var ICON_DIAGRAM = ["M4 4 h6 v5 H4 z", "M14 15 h6 v5 h-6 z", "M7 9 v6 h10"];
+var ICON_DOWNLOAD = ["M12 4 v10", "M8 11 l4 4 l4 -4", "M5 19 h14"];
+var LABEL_SHOW_SOURCE = "ソースを表示";
+var LABEL_SHOW_DIAGRAM = "図を表示";
+var LABEL_DOWNLOAD = "SVG をダウンロード";
+
+// アイコンは外部ファイルを持たず、その場で組み立てる。
+function makeIcon(pathData) {
+	var iconElem = document.createElementNS(SVG_NS, "svg");
+	iconElem.setAttribute("viewBox", "0 0 24 24");
+	iconElem.setAttribute("width", "16");
+	iconElem.setAttribute("height", "16");
+	iconElem.setAttribute("fill", "none");
+	iconElem.setAttribute("stroke", "currentColor");
+	iconElem.setAttribute("stroke-width", "2");
+	iconElem.setAttribute("stroke-linecap", "round");
+	iconElem.setAttribute("stroke-linejoin", "round");
+	iconElem.setAttribute("aria-hidden", "true");
+	pathData.forEach(function (d) {
+		var pathElem = document.createElementNS(SVG_NS, "path");
+		pathElem.setAttribute("d", d);
+		iconElem.appendChild(pathElem);
+	});
+	return iconElem;
+}
+
+function setButtonFace(buttonElem, label, pathData) {
+	buttonElem.setAttribute("aria-label", label);
+	buttonElem.setAttribute("title", label);
+	while (buttonElem.firstChild != null) {
+		buttonElem.removeChild(buttonElem.firstChild);
 	}
+	buttonElem.appendChild(makeIcon(pathData));
+}
+
+function makeButton(label, pathData, onActivate) {
+	var buttonElem = document.createElement("button");
+	buttonElem.type = "button";
+	buttonElem.className = "pegmatite-button";
+	setButtonFace(buttonElem, label, pathData);
+	// ページ側にもクリックの処理があるため、ここで止める。
+	buttonElem.addEventListener("click", function (event) {
+		event.preventDefault();
+		event.stopPropagation();
+		onActivate();
+	});
+	return buttonElem;
+}
+
+// 図の名前として使えるものを、確からしい順に探す。@start のパラメータは
+// PlantUML では出力ファイル名の指定にあたるため、最後の手掛かりとして使う。
+var NAME_PATTERNS = [
+	/^[ \t]*caption[ \t]+(.+)$/im,
+	/^[ \t]*title[ \t]+(.+)$/im,
+	/^[ \t]*@start\w+[ \t]+(.+)$/im
+];
+var UNSAFE_FILENAME_PATTERN = /[\\/:*?"<>|]/g;
+var IMAGE_EXTENSION_PATTERN = /\.(svg|png|txt|eps|pdf|vdx|html|latex)$/i;
+
+// ファイル名は caption、title、@start のパラメータの順に採る。
+// どれもない場合と、使えない文字を取り除いて空になった場合はページ内の連番を使う。
+function getDiagramFileName(plantuml, index) {
+	for (var i = 0; i < NAME_PATTERNS.length; i++) {
+		var matched = NAME_PATTERNS[i].exec(plantuml);
+		if (matched === null) continue;
+
+		var name = matched[1]
+			.replace(UNSAFE_FILENAME_PATTERN, "")
+			.replace(/\s+/g, " ")
+			.trim()
+			// @start のパラメータは拡張子付きで書かれることがある
+			.replace(IMAGE_EXTENSION_PATTERN, "")
+			// Windows は末尾の点と空白を扱えない
+			.replace(/[. ]+$/, "");
+		if (name.length > 0) return name.substr(0, 100) + ".svg";
+	}
+	return "plantuml-" + index + ".svg";
+}
+
+// 保存するファイルは、画面の表示がダークテーマでも常にライトテーマで描く。
+// 描き直しに失敗した場合だけ、表示中の図をそのまま保存する。
+function downloadSvg(plantuml, shownElem, index) {
+	requestRender(plantuml, false, function (error, svgText) {
+		var svgElem = error === null ? sanitizeSvg(svgText) : null;
+		saveSvg(svgElem !== null ? svgElem : shownElem.cloneNode(true),
+			getDiagramFileName(plantuml, index));
+	});
+}
+
+// 保存するのは sanitizeSvg を通したあとの内容で、表示のために付けた寸法の指定は残さない。
+// 拡張機能の権限は増やさず、Blob の URL を開くだけで保存する。
+function saveSvg(svgElem, fileName) {
+	svgElem.style.maxWidth = "";
+	svgElem.style.height = "";
+
+	var text = new XMLSerializer().serializeToString(svgElem);
+	var url = URL.createObjectURL(new Blob([text], { "type": "image/svg+xml" }));
+	var linkElem = document.createElement("a");
+	linkElem.href = url;
+	linkElem.download = fileName;
+	linkElem.style.display = "none";
+	document.documentElement.appendChild(linkElem);
+	linkElem.click();
+	document.documentElement.removeChild(linkElem);
+
+	// 保存が始まる前に取り消すと失敗するため、少し置いてから解放する。
+	setTimeout(function () {
+		URL.revokeObjectURL(url);
+	}, 1000);
+}
+
+// 図とソースを入れ替えても操作のアイコンが残るよう、両者を包む要素を 1 つ挟む。
+function replaceElement(umlElem, svgElem, plantuml, disableChangeBackgroundColor = false) {
+	var parent = umlElem.parentNode;
+	if (parent === null) return; // for asciidoc (div div pre)
+
+	ensureStyle();
+	var codePre = getCodePre();
+	svgElem.style.maxWidth = "100%";
+	svgElem.style.height = "auto";
+
+	var diagramElem = document.createElement("div");
+	diagramElem.className = "pegmatite-diagram";
+	diagramElem.style.overflowX = "auto";
+	diagramElem.appendChild(svgElem);
+
+	var blockElem = document.createElement("div");
+	blockElem.className = "pegmatite-block";
+
+	var toolbarElem = document.createElement("div");
+	toolbarElem.className = "pegmatite-toolbar";
+	blockElem.appendChild(toolbarElem);
+
+	state.blockSeq++;
+	var index = state.blockSeq;
+	var showingDiagram = true;
+
+	var toggleButton = makeButton(LABEL_SHOW_SOURCE, ICON_SOURCE, function () {
+		showingDiagram = !showingDiagram;
+		if (showingDiagram) {
+			blockElem.replaceChild(diagramElem, umlElem);
+			setButtonFace(toggleButton, LABEL_SHOW_SOURCE, ICON_SOURCE);
+		} else {
+			blockElem.replaceChild(umlElem, diagramElem);
+			setButtonFace(toggleButton, LABEL_SHOW_DIAGRAM, ICON_DIAGRAM);
+		}
+		if (!disableChangeBackgroundColor) {
+			changeBackgroundColor(parent,
+				showingDiagram ? codePre.parentColor : codePre.selfColor,
+				codePre.exist);
+		}
+	});
+	toolbarElem.appendChild(toggleButton);
+
+	// 表示している内容に関わらず、図を SVG として保存できるようにする。
+	toolbarElem.appendChild(makeButton(LABEL_DOWNLOAD, ICON_DOWNLOAD, function () {
+		downloadSvg(plantuml, svgElem, index);
+	}));
+
+	parent.replaceChild(blockElem, umlElem);
+	blockElem.appendChild(diagramElem);
+	if (!disableChangeBackgroundColor) {
+		changeBackgroundColor(parent, codePre.parentColor, codePre.exist);
+	}
+}
+
+// 描画に失敗したときはコードブロックを残し、その直後に理由を添える。
+// 再描画は行わない。要素が DOM に残る以上、再試行すると MutationObserver との間で
+// 際限なく往復するため。
+function showError(umlElem, message) {
+	var parent = umlElem.parentNode;
+	if (parent === null) return;
+
+	var next = umlElem.nextSibling;
+	if (next !== null && next.nodeType === 1 &&
+		next.className === "pegmatite-error") {
+		next.textContent = "PlantUML: " + message;
+		return;
+	}
+
+	var errorElem = document.createElement("div");
+	errorElem.className = "pegmatite-error";
+	errorElem.style.cssText =
+		"color:#b00020;font-family:monospace;white-space:pre-wrap;";
+	errorElem.textContent = "PlantUML: " + message;
+	parent.insertBefore(errorElem, next);
 }
 
 var siteProfiles = {
@@ -182,6 +540,9 @@ var siteProfiles = {
 		"selector": "pre.lang-uml, pre.lang-puml, pre.lang-plantuml",
 		"extract": function (elem) {
 			return elem.innerText.trim();
+		},
+		"replace": function (elem) {
+			return elem;
 		}
 	},
 	"github.com": { // markdown + asciidoc
@@ -211,20 +572,17 @@ var siteProfiles = {
 };
 
 
-function loop(counter, retry, siteProfile, baseUrl){
+function loop(counter, retry, siteProfile){
 	counter++;
 	if (document.querySelector("i[aria-label='Loading content…']")==null) counter+=retry;
-	var id = setTimeout(loop,100,counter,retry, siteProfile, baseUrl);
+	var id = setTimeout(loop,100,counter,retry, siteProfile);
 	if(counter>=retry){
 		clearTimeout(id);
-		onLoadAction(siteProfile, baseUrl);
+		onLoadAction(siteProfile);
 	}
 }
 
-var processedElements = [];
-var processedPlantUml = [];
-
-function onLoadAction(siteProfile, baseUrl){
+function onLoadAction(siteProfile){
 	[].forEach.call(document.querySelectorAll(siteProfile.selector), function (umlElem) {
 		if (siteProfile.normalize != null) {
 			umlElem = siteProfile.normalize(umlElem);
@@ -238,36 +596,42 @@ function onLoadAction(siteProfile, baseUrl){
 				return;
 			}
 		}
-		var processedIndex = processedElements.indexOf(umlElem);
-		if (processedIndex >= 0 && processedPlantUml[processedIndex] == plantuml) return;
+		var processedIndex = state.processedElements.indexOf(umlElem);
+		if (processedIndex >= 0 && state.processedPlantUml[processedIndex] == plantuml) return;
 		if (processedIndex >= 0) {
-			processedPlantUml[processedIndex] = plantuml;
+			state.processedPlantUml[processedIndex] = plantuml;
 		} else {
-			processedElements.push(umlElem);
-			processedPlantUml.push(plantuml);
+			state.processedElements.push(umlElem);
+			state.processedPlantUml.push(plantuml);
 		}
-		var plantUmlServerUrl = baseUrl + compress(plantuml);
 		var replaceElem = siteProfile.replace(umlElem);
 		var disableChangeBackgroundColor = siteProfile.disableChangeBackgroundColor || false;
-		if (plantUmlServerUrl.lastIndexOf("https", 0) === 0) { // if URL starts with "https"
-			replaceElement(replaceElem, plantUmlServerUrl, disableChangeBackgroundColor);
-		} else {
-			// to avoid mixed-content
-			chrome.runtime.sendMessage({ "action": "plantuml", "url": plantUmlServerUrl }, function(dataUri) {
-				replaceElement(replaceElem, dataUri, disableChangeBackgroundColor);
-			});
-		}
+		requestRender(plantuml, isDarkMode(), function (error, svgText) {
+			if (error !== null) {
+				showError(replaceElem, error);
+				return;
+			}
+			var svgElem = sanitizeSvg(svgText);
+			if (svgElem === null) {
+				showError(replaceElem, "描画結果を解析できませんでした。");
+				return;
+			}
+			replaceElement(replaceElem, svgElem, plantuml, disableChangeBackgroundColor);
+		});
 	});
 }
 
-function observeGitLab(config) {
-	var siteProfile = siteProfiles["gitlab.com"];
-	var baseUrl = config.baseUrl || "https://www.plantuml.com/plantuml/img/";
+// GitLab も GitHub も本文を後から差し込むため、読み込み時の走査だけでは足りない。
+// 重複防止は onLoadAction 側で行うので、発火しすぎても描画は増えない。
+function observeDocument(siteProfile) {
+	if (state.observing) return;
+	state.observing = true;
+
 	var timer;
 	var observer = new MutationObserver(function() {
 		clearTimeout(timer);
 		timer = setTimeout(function() {
-			onLoadAction(siteProfile, baseUrl);
+			onLoadAction(siteProfile);
 		}, 100);
 	});
 
@@ -277,48 +641,51 @@ function observeGitLab(config) {
 	});
 }
 
-function run(config) {
-
-	var hostname;
+function getSiteProfileKey() {
 	if (window.location.pathname.substr(0, "/gitbucket".length) == "/gitbucket") {
-		hostname = "gitbucket";
+		return "gitbucket";
 	}
-	else if (window.location.pathname.substr(0, "/gitlab".length) == "/gitlab") {
-		hostname = "gitlab.com";
+	if (window.location.pathname.substr(0, "/gitlab".length) == "/gitlab") {
+		return "gitlab.com";
 	}
-	else {
-		hostname = window.location.hostname.split(".").slice(-2).join(".");
-	}
-
-	var siteProfile = siteProfiles[hostname] || siteProfiles["default"];
-	var baseUrl = config.baseUrl || "https://www.plantuml.com/plantuml/img/";
-	if (document.querySelector("i[aria-label='Loading content…']")!=null){ // for wait loading @ gitlab.com
-		loop(1, 10, siteProfile, baseUrl);
-		return; // wait for loop to finish before processing
-	}
-	onLoadAction(siteProfile, baseUrl);
+	return window.location.hostname.split(".").slice(-2).join(".");
 }
 
-chrome.storage.local.get("baseUrl", function(config) {
+function run() {
+	var siteProfile = siteProfiles[getSiteProfileKey()] || siteProfiles["default"];
+	if (document.querySelector("i[aria-label='Loading content…']")!=null){ // for wait loading @ gitlab.com
+		loop(1, 10, siteProfile);
+		return; // wait for loop to finish before processing
+	}
+	onLoadAction(siteProfile);
+}
+
+function bootstrap() {
+	var profileKey = getSiteProfileKey();
+	var siteProfile = siteProfiles[profileKey] || siteProfiles["default"];
+
 	if (window.location.hostname === "bitbucket.org") {
-		var observer = new MutationObserver(function() {
-			if (document.getElementsByClassName("language-plantuml").length > 0) {
-				run(config);
-				observer.disconnect();
-			}
-		});
+		if (!state.bitbucketObserving) {
+			state.bitbucketObserving = true;
+			var bitbucketObserver = new MutationObserver(function() {
+				if (document.getElementsByClassName("language-plantuml").length > 0) {
+					run();
+					bitbucketObserver.disconnect();
+				}
+			});
 
-		observer.observe(document.body, {
-			attributes: true,
-			characterData: true,
-			childList: true,
-			subtree: true
-		});
-	}
-	if (window.location.hostname === "gitlab.com" ||
-		window.location.pathname.substr(0, "/gitlab".length) == "/gitlab") {
-		observeGitLab(config);
+			bitbucketObserver.observe(document.body, {
+				attributes: true,
+				characterData: true,
+				childList: true,
+				subtree: true
+			});
+		}
+	} else if (profileKey === "gitlab.com" || profileKey === "github.com") {
+		observeDocument(siteProfile);
 	}
 
-	run(config);
-});
+	run();
+}
+
+bootstrap();

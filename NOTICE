@@ -1,0 +1,42 @@
+Pegmatite-gitbucket
+Copyright 2017-2020 Daisuke Miyamoto
+Copyright 2021-2026 Tetsuo Honda
+
+This product includes software developed as Pegmatite by Daisuke Miyamoto
+(https://github.com/dai0304/pegmatite), with enhanced GitBucket support by
+Tetsuo Honda (https://github.com/Hondarer/pegmatite).
+
+Licensed under the Apache License, Version 2.0. See LICENSE for the full text.
+
+
+THIRD-PARTY SOFTWARE
+
+The packaged extension bundles the following third-party software. These files
+are not committed to this repository; they are fetched from npm into
+pegmatite/vendor/ by "npm run vendor" and included in the release ZIP.
+
+  @plantuml/core (pegmatite/vendor/plantuml.js)
+  PlantUML, compiled to JavaScript with TeaVM.
+  Copyright (C) 2009-2024 Arnaud Roques
+  https://plantuml.com/
+  Licensed under the MIT License.
+
+  Viz.js 3.24.0 (pegmatite/vendor/viz-global.js)
+  Graphviz layout engine compiled to WebAssembly.
+  Copyright (c) Michael Daines
+  https://github.com/mdaines/viz-js
+  Licensed under the MIT License.
+
+  This distribution of Viz.js contains, in object code form:
+
+    Graphviz
+    https://www.graphviz.org/
+    Licensed under the Eclipse Public License, Version 1.0.
+
+    Expat
+    https://libexpat.github.io/
+    Licensed under the MIT License.
+
+Both bundled files retain their own copyright and license headers, so the
+attribution notices travel with the release ZIP even though this NOTICE file
+itself is not packaged.

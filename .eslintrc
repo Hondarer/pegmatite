@@ -24,7 +24,21 @@
 			"always"
 		]
 	},
-	"globals": {
-		"deflate": true
-	}
+	"overrides": [
+		{
+			"files": ["pegmatite/renderer.js"],
+			"parserOptions": {
+				"sourceType": "module"
+			}
+		},
+		{
+			"files": ["tools/*.js"],
+			"env": {
+				"node": true
+			},
+			"rules": {
+				"no-console": "off"
+			}
+		}
+	]
 }

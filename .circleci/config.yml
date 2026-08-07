@@ -2,7 +2,7 @@ version: 2
 jobs:
   build:
     docker:
-      - image: circleci/node:7-browsers
+      - image: cimg/node:20.19
     working_directory: ~/workspace
     steps:
       - checkout
@@ -16,6 +16,9 @@ jobs:
           key: dependency-cache-{{ .Branch }}-{{ .Revision }}
           paths:
             - ./node_modules
+      - run:
+          name: vendor
+          command: npm run vendor
       - run:
           name: lint
           command: |
