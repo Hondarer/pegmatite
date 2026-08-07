@@ -1,8 +1,9 @@
-# Pegmatite-gitbucket - Chrome ext to preview PlantUML in markdown
+# PlantUML In-Place Preview
 
-Pegmatite is Google Chrome extension that renders PlantUML code blocks as diagrams.
+PlantUML In-Place Preview is a Google Chrome extension that renders PlantUML code blocks as diagrams in place.
+It is a maintained fork of [Pegmatite](https://github.com/dai0304/pegmatite); the repository keeps the name `pegmatite` for continuity with the upstream project.
 
-This version enhances the original Pegmatite with GitBucket support and stronger GitLab support.
+This fork adds GitBucket support and stronger GitLab support.
 Rendering runs inside the browser instead of on a server.
 No PlantUML server is contacted, so diagram source never leaves your machine.
 
@@ -95,7 +96,7 @@ baz
 
 ## How rendering works
 
-Pegmatite bundles the PlantUML JavaScript engine ([`@plantuml/core`](https://www.npmjs.com/package/@plantuml/core)).
+PlantUML In-Place Preview bundles the PlantUML JavaScript engine ([`@plantuml/core`](https://www.npmjs.com/package/@plantuml/core)).
 This is the official PlantUML compiled to JavaScript with [TeaVM](https://github.com/konsoletyper/teavm).
 Class, component, state, and activity diagrams need Graphviz layout.
 That is provided by the bundled [Viz.js](https://github.com/mdaines/viz-js) WebAssembly build.
@@ -118,10 +119,10 @@ The iframe is created only when a page actually contains a diagram, so pages wit
 
 ### Differences from the fork point (the original)
 
-The fork point is [dai0304/pegmatite](https://github.com/dai0304/pegmatite) 1.6.0.
+The fork point is [dai0304/pegmatite](https://github.com/dai0304/pegmatite) 1.6.0 (Pegmatite).
 That version renders through a PlantUML server.
 
-| Aspect | Original 1.6.0 | This fork 2.0.0
+| Aspect | Original 1.6.0 | This fork 2.0.x
 | ------ | -------------- | ---------------
 | Rendering | PlantUML server over the network | Bundled engine, in the browser
 | Diagram source leaves the machine | Yes | No
@@ -140,8 +141,8 @@ That version renders through a PlantUML server.
 It bundles the same TeaVM-compiled engine, so the diagrams themselves are identical.
 The differences are in the sites covered and in how the result is placed on the page.
 
-| Aspect | PlantUML for GitHub | Pegmatite-gitbucket
-| ------ | ------------------- | -------------------
+| Aspect | PlantUML for GitHub | PlantUML In-Place Preview
+| ------ | ------------------- | -------------------------
 | Sites | GitHub only | GitHub, GitLab, GitBucket, Bitbucket, Backlog
 | Self-hosted instances | Not supported | GitBucket and GitLab, over HTTP too
 | Fences detected | `plantuml`, `puml`, `wsd` | `uml`, `puml`, `plantuml`, and asciidoc blocks
@@ -153,7 +154,7 @@ The differences are in the sites covered and in how the result is placed on the 
 | License | MIT | Apache-2.0
 
 If you only use github.com, the official extension asks for fewer permissions and is the simpler choice.
-Pegmatite-gitbucket adds convenience for self-hosted GitBucket and GitLab.
+PlantUML In-Place Preview adds convenience for self-hosted GitBucket and GitLab.
 The official extension does not support them.
 
 ## Building and testing locally
@@ -174,7 +175,7 @@ This copies `plantuml.js` and `viz-global.js` into `pegmatite/vendor/`. Then:
 4. Select the `pegmatite` directory that contains `manifest.json`.
 5. Open or reload a supported page containing a PlantUML code block.
 
-After changing the source code, click **Reload** on the Pegmatite extension card and then reload the tab.
+After changing the source code, click **Reload** on the PlantUML In-Place Preview extension card and then reload the tab.
 Confirm that:
 
 * `uml`, `puml`, and `plantuml` code blocks are replaced with diagrams.
@@ -188,7 +189,7 @@ Confirm that:
 
 If the extension does not run:
 
-1. Check the Pegmatite extension card for errors.
+1. Check the PlantUML In-Place Preview extension card for errors.
 2. Open the extension's **Service worker** link and inspect its DevTools console.
 3. Inspect the page's DevTools console.
 4. Confirm that the page URL matches one of the URL patterns in `pegmatite/manifest.json`.
@@ -196,13 +197,13 @@ If the extension does not run:
 
 ## Privacy
 
-Pegmatite reads PlantUML source from supported code blocks and renders it in the browser.
+PlantUML In-Place Preview reads PlantUML source from supported code blocks and renders it in the browser.
 The source is not sent anywhere: there is no rendering server, and the extension stores no user data.
 See [PRIVACY.md](PRIVACY.md) for details.
 
 ## Third-party software
 
-Pegmatite itself is licensed under the Apache License 2.0.
+PlantUML In-Place Preview itself is licensed under the Apache License 2.0.
 The packaged extension additionally bundles two MIT-licensed components.
 One is `@plantuml/core`, which is PlantUML by Arnaud Roques compiled to JavaScript.
 The other is Viz.js by Michael Daines.
@@ -230,9 +231,10 @@ See [NOTICE](NOTICE) for the full attribution.
 
 ## 日本語
 
-Pegmatite は、PlantUML のコードブロックを図として描画する Google Chrome の拡張機能です。
+PlantUML In-Place Preview は、PlantUML のコードブロックをその場で図として描画する Google Chrome の拡張機能です。
+[Pegmatite](https://github.com/dai0304/pegmatite) のフォークを保守したもので、リポジトリ名 `pegmatite` はフォーク元との一貫性のため残しています。
 
-このバージョンは、オリジナルの Pegmatite に GitBucket 対応、GitLab 対応の強化を行い、描画をサーバーサイドではなくブラウザ内で行うようにエンハンスしたものです。
+このフォークは GitBucket 対応と GitLab 対応の強化を行い、描画をサーバーサイドではなくブラウザ内で行うようにしています。
 PlantUML サーバへは接続しないため、図のソースが手元の環境から出ることはありません。
 
 [Chrome ウェブストア](https://chrome.google.com/webstore/detail/pegmatite-gitbucket/gkdjfofhecooaojkhbohidojebbpcene)
@@ -268,7 +270,7 @@ PlantUML サーバへは接続しないため、図のソースが手元の環�
 
 ### 描画の仕組み
 
-Pegmatite は PlantUML の JavaScript 版エンジン ([`@plantuml/core`](https://www.npmjs.com/package/@plantuml/core)) を同梱しています。
+PlantUML In-Place Preview は PlantUML の JavaScript 版エンジン ([`@plantuml/core`](https://www.npmjs.com/package/@plantuml/core)) を同梱しています。
 これは PlantUML 本家を [TeaVM](https://github.com/konsoletyper/teavm) で JavaScript にコンパイルしたものです。
 クラス図、コンポーネント図、ステート図、アクティビティ図には Graphviz のレイアウトが必要です。
 これは同梱した [Viz.js](https://github.com/mdaines/viz-js) の WebAssembly 版が担います。
@@ -292,10 +294,10 @@ iframe を作るのは、ページに実際に図が含まれている場合だ�
 
 #### フォーク元 (オリジナル) との違い
 
-フォーク元は [dai0304/pegmatite](https://github.com/dai0304/pegmatite) の 1.6.0 です。
+フォーク元は [dai0304/pegmatite](https://github.com/dai0304/pegmatite) の 1.6.0 (Pegmatite) です。
 このバージョンは、PlantUML サーバ経由で描画を行います。
 
-| 項目 | オリジナル 1.6.0 | 本フォーク 2.0.0
+| 項目 | オリジナル 1.6.0 | 本フォーク 2.0.x
 | ---- | ---------------- | ----------------
 | 描画方式 | ネットワーク越しの PlantUML サーバ | 同梱エンジンによるブラウザ内描画
 | 図のソースの外部送信 | あり | なし
@@ -314,8 +316,8 @@ iframe を作るのは、ページに実際に図が含まれている場合だ�
 TeaVM でコンパイルした同じエンジンを同梱しているため、描画される図そのものは同一です。
 違いは対応範囲と、結果をページへ置く方法です。
 
-| 項目 | PlantUML for GitHub | Pegmatite-gitbucket
-| ---- | ------------------- | -------------------
+| 項目 | PlantUML for GitHub | PlantUML In-Place Preview
+| ---- | ------------------- | -------------------------
 | 対応サイト | GitHub のみ | GitHub、GitLab、GitBucket、Bitbucket、Backlog
 | 自ホストのインスタンス | 非対応 | GitBucket と GitLab、HTTP も可
 | 検出する言語指定 | `plantuml`、`puml`、`wsd` | `uml`、`puml`、`plantuml`、asciidoc
@@ -327,7 +329,7 @@ TeaVM でコンパイルした同じエンジンを同梱しているため、�
 | ライセンス | MIT | Apache-2.0
 
 github.com しか利用しないのであれば、公式の拡張機能のほうが要求する権限が少なく簡潔です。
-Pegmatite-gitbucket は、公式ではサポートされない自ホストの GitBucket と GitLab に対する利便性を提供します。
+PlantUML In-Place Preview は、公式ではサポートされない自ホストの GitBucket と GitLab に対する利便性を提供します。
 
 ### ビルドとローカルでの動作確認
 
@@ -346,7 +348,7 @@ npm run vendor
 4. `manifest.json` を含む `pegmatite` ディレクトリを選択します。
 5. PlantUML のコードブロックを含む対応ページを開くか、再読み込みします。
 
-ソースコードを変更したあとは、Pegmatite の拡張機能カードで 再読み込み をクリックし、続いてタブを再読み込みしてください。
+ソースコードを変更したあとは、PlantUML In-Place Preview の拡張機能カードで 再読み込み をクリックし、続いてタブを再読み込みしてください。
 そのうえで次の点を確認します。
 
 * `uml`、`puml`、`plantuml` のコードブロックが図に置き換わること。
@@ -360,7 +362,7 @@ npm run vendor
 
 拡張機能が動作しない場合は、次の順に確認してください。
 
-1. Pegmatite の拡張機能カードにエラーが出ていないか確認します。
+1. PlantUML In-Place Preview の拡張機能カードにエラーが出ていないか確認します。
 2. 拡張機能の Service worker のリンクを開き、その DevTools のコンソールを確認します。
 3. ページの DevTools のコンソールを確認します。
 4. ページの URL が `pegmatite/manifest.json` の URL パターンのいずれかに一致するか確認します。
@@ -368,14 +370,14 @@ npm run vendor
 
 ### プライバシー
 
-Pegmatite は、対応するコードブロックから PlantUML のソースを読み取り、ブラウザ内で描画します。
+PlantUML In-Place Preview は、対応するコードブロックから PlantUML のソースを読み取り、ブラウザ内で描画します。
 ソースはどこにも送信しません。
 描画サーバは存在せず、拡張機能が利用者のデータを保存することもありません。
 詳細は [PRIVACY.md](PRIVACY.md) を参照してください。
 
 ### 第三者ソフトウェア
 
-Pegmatite 自体は Apache License 2.0 のもとで提供されます。
+PlantUML In-Place Preview 自体は Apache License 2.0 のもとで提供されます。
 パッケージ化した拡張機能には、これに加えて MIT ライセンスの 2 つのコンポーネントを同梱しています。
 1 つは Arnaud Roques 氏による PlantUML を JavaScript にコンパイルした `@plantuml/core` です。
 もう 1 つは Michael Daines 氏による Viz.js です。

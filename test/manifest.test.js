@@ -12,7 +12,8 @@ var manifest = JSON.parse(fs.readFileSync(path.join(extensionRoot, "manifest.jso
 var packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 
 assert.strictEqual(manifest.manifest_version, 3);
-assert.strictEqual(manifest.version, "2.0.0");
+assert.strictEqual(manifest.name, "PlantUML In-Place Preview");
+assert.strictEqual(manifest.version, "2.0.1");
 assert.strictEqual(packageJson.version, manifest.version);
 assert.notStrictEqual(manifest.permissions.indexOf("scripting"), -1);
 assert.strictEqual(manifest.permissions.indexOf("tabs"), -1);

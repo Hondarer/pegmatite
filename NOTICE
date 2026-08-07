@@ -1,10 +1,11 @@
-Pegmatite-gitbucket
+PlantUML In-Place Preview
 Copyright 2017-2020 Daisuke Miyamoto
 Copyright 2021-2026 Tetsuo Honda
 
-This product includes software developed as Pegmatite by Daisuke Miyamoto
+This product is a maintained fork of Pegmatite by Daisuke Miyamoto
 (https://github.com/dai0304/pegmatite), with enhanced GitBucket support by
-Tetsuo Honda (https://github.com/Hondarer/pegmatite).
+Tetsuo Honda (https://github.com/Hondarer/pegmatite). The repository directory
+name remains pegmatite for continuity with the upstream project.
 
 Licensed under the Apache License, Version 2.0. See LICENSE for the full text.
 
@@ -38,5 +39,4 @@ pegmatite/vendor/ by "npm run vendor" and included in the release ZIP.
     Licensed under the MIT License.
 
 Both bundled files retain their own copyright and license headers, so the
-attribution notices travel with the release ZIP even though this NOTICE file
-itself is not packaged.
+NOTICE text above is attribution only and does not replace those licenses.

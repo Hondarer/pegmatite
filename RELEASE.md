@@ -25,6 +25,9 @@
     Compress-Archive -Path pegmatite\* -DestinationPath pegmatite-x.y.z.zip
     ```
 
+    The ZIP file name uses the repository directory name `pegmatite`, not the Store display name
+    PlantUML In-Place Preview.
+
 5. Load the extracted ZIP in Microsoft Edge or Google Chrome.
    Complete the browser smoke test documented in `README.md`.
 6. Commit the release, create a lightweight tag, and push only to `origin`.
@@ -39,6 +42,14 @@
 7. In the GitHub web UI, create a release from the tag and attach the verified ZIP.
 8. Open the [Chrome Web Store Developer Dashboard](https://chrome.google.com/webstore/devconsole/).
    Select extension `gkdjfofhecooaojkhbohidojebbpcene` and upload the same ZIP.
-9. Review the Store listing and Privacy practices against `PRIVACY.md`, then submit for review and publish.
+9. Set the Store listing name to **PlantUML In-Place Preview** when it differs from the package.
+   Review the Store listing and Privacy practices against `PRIVACY.md`, then submit for review and publish.
+
+   Example review note for a display-name-only release:
+
+   ```text
+   Display name rename: Pegmatite-gitbucket → PlantUML In-Place Preview.
+   Extension ID unchanged. No functional change beyond naming and docs.
+   ```
 
 Do not push release changes to `upstream` or `master`.

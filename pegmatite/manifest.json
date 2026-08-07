@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "Pegmatite-gitbucket",
-  "version": "2.0.0",
-  "description": "Shows graphs and diagrams rendered by PlantUML, entirely in your browser.",
+  "name": "PlantUML In-Place Preview",
+  "version": "2.0.1",
+  "description": "Renders PlantUML code blocks in place, entirely in your browser.",
   "icons": {
     "128": "icon128.png"
   },

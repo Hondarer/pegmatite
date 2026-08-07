@@ -1,6 +1,49 @@
+# 2.0.1
+
+PlantUML In-Place Preview 2.0.1 renames the extension display name.
+There is no change to rendering behavior.
+
+## Changes
+
+* Change the Chrome Web Store and `manifest.json` display name from Pegmatite-gitbucket to **PlantUML In-Place Preview**.
+* Keep the extension ID (`gkdjfofhecooaojkhbohidojebbpcene`). Existing installs receive the new name on update.
+* Keep the repository name and the on-disk package directory as `pegmatite`, for continuity with the upstream Pegmatite fork.
+* Align documentation, privacy policy, and NOTICE with the new product name.
+
+## Upgrading
+
+Update from the Chrome Web Store (or reload the unpacked extension).
+No configuration change is required.
+
+**Full Changelog**: [2.0.0...2.0.1](https://github.com/Hondarer/pegmatite/compare/2.0.0...2.0.1)
+
+## 日本語
+
+以下は上記英文と同一内容の日本語記述です。
+
+PlantUML In-Place Preview 2.0.1 は、拡張機能の表示名を変更するリリースです。
+描画の動作には変更ありません。
+
+### 変更点
+
+Chrome ウェブストアおよび `manifest.json` の表示名を、Pegmatite-gitbucket から **PlantUML In-Place Preview** に変更しました。
+
+拡張機能 ID (`gkdjfofhecooaojkhbohidojebbpcene`) は変わりません。
+既存のインストールは、更新時に新しい表示名になります。
+
+リポジトリ名と配布物のディレクトリ名は、フォーク元 Pegmatite との一貫性のため `pegmatite` のままです。
+
+ドキュメント、プライバシーポリシー、NOTICE の表記を新しい製品名に揃えました。
+
+### 移行にあたって
+
+Chrome ウェブストアから更新する (またはパッケージ化していない拡張機能を再読み込みする) だけで十分です。
+設定の変更は不要です。
+
 # 2.0.0
 
-Pegmatite 2.0.0 renders PlantUML diagrams entirely in the browser.
+Version 2.0.0 was published under the Store display name Pegmatite-gitbucket.
+It renders PlantUML diagrams entirely in the browser.
 No PlantUML server is contacted, so diagram source never leaves the machine.
 
 This is a major version because the rendering server, and the *Base URL* setting that configured it, have been removed.
@@ -44,7 +87,8 @@ The packaged extension is about 8.2 MB unpacked and 1.9 MB zipped.
 
 以下は上記英文と同一内容の日本語記述です。
 
-Pegmatite 2.0.0 は、PlantUML の図をすべてブラウザ内で描画します。
+バージョン 2.0.0 は、ストア表示名 Pegmatite-gitbucket として公開されました。
+PlantUML の図をすべてブラウザ内で描画します。
 PlantUML サーバへは接続しないため、図のソースが手元の環境から出ることはありません。
 
 描画サーバの利用と、それを設定していた Base URL の項目を削除したため、メジャーバージョンを上げました。
