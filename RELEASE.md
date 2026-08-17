@@ -18,6 +18,9 @@
 
     `pegmatite/vendor/` is not committed, so `npm run vendor` must run before the ZIP is created.
     Otherwise the packaged extension will fail to render.
+    The same command copies LICENSE, NOTICE, README.md, each production
+    dependency's LICENSE, and the third-party license texts in
+    `third_party/` into the ZIP root (`pegmatite/`).
 
 4. Create a ZIP whose root contains `manifest.json`. On PowerShell:
 

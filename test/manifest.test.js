@@ -13,7 +13,7 @@ var packageJson = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "u
 
 assert.strictEqual(manifest.manifest_version, 3);
 assert.strictEqual(manifest.name, "PlantUML In-Place Preview");
-assert.strictEqual(manifest.version, "2.0.1");
+assert.strictEqual(manifest.version, "2.0.2");
 assert.strictEqual(packageJson.version, manifest.version);
 assert.notStrictEqual(manifest.permissions.indexOf("scripting"), -1);
 assert.strictEqual(manifest.permissions.indexOf("tabs"), -1);
@@ -64,3 +64,76 @@ var webAccessible = manifest.web_accessible_resources[0];
 			relativePath + " must exist"
 		);
 	});
+
+function licenseSlug(packageName) {
+	return packageName.replace(/^@/, "").replace(/\//g, "-");
+}
+
+function findLicenseFile(packageDir) {
+	var names = ["LICENSE", "LICENCE", "license", "licence"];
+	var i;
+	for (i = 0; i < names.length; i++) {
+		var candidate = path.join(packageDir, names[i]);
+		if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+			return candidate;
+		}
+	}
+	return null;
+}
+
+[
+	"LICENSE",
+	"NOTICE",
+	"README.md"
+].forEach(function (name) {
+	var dest = path.join(extensionRoot, name);
+	assert.strictEqual(fs.existsSync(dest), true, name + " must exist");
+	assert.strictEqual(
+		fs.readFileSync(dest, "utf8"),
+		fs.readFileSync(path.join(root, name), "utf8"),
+		name + " must match the repository copy"
+	);
+	assert.strictEqual(
+		webAccessible.resources.indexOf(name),
+		-1,
+		name + " must not be web accessible"
+	);
+});
+
+Object.keys(packageJson.dependencies).forEach(function (name) {
+	var destName = "LICENSE." + licenseSlug(name);
+	var dest = path.join(extensionRoot, destName);
+	var packageDir = path.join.apply(path, [root, "node_modules"].concat(name.split("/")));
+	var licenseSrc = findLicenseFile(packageDir);
+	assert.notStrictEqual(licenseSrc, null, name + " must have a LICENSE in node_modules");
+	assert.strictEqual(fs.existsSync(dest), true, destName + " must exist");
+	assert.strictEqual(
+		fs.readFileSync(dest, "utf8"),
+		fs.readFileSync(licenseSrc, "utf8"),
+		destName + " must match the dependency LICENSE"
+	);
+	assert.strictEqual(
+		webAccessible.resources.indexOf(destName),
+		-1,
+		destName + " must not be web accessible"
+	);
+});
+
+[
+	"LICENSE.viz-js",
+	"LICENSE.graphviz",
+	"LICENSE.expat"
+].forEach(function (name) {
+	var dest = path.join(extensionRoot, name);
+	assert.strictEqual(fs.existsSync(dest), true, name + " must exist");
+	assert.strictEqual(
+		fs.readFileSync(dest, "utf8"),
+		fs.readFileSync(path.join(root, "third_party", name), "utf8"),
+		name + " must match third_party"
+	);
+	assert.strictEqual(
+		webAccessible.resources.indexOf(name),
+		-1,
+		name + " must not be web accessible"
+	);
+});

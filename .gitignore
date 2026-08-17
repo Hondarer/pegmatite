@@ -5,3 +5,8 @@ pegmatite-*.zip
 /.idea/
 node_modules
 pegmatite/vendor/
+pegmatite/LICENSE
+pegmatite/LICENSE.*
+pegmatite/NOTICE
+pegmatite/README.md
+

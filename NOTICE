@@ -27,16 +27,27 @@ pegmatite/vendor/ by "npm run vendor" and included in the release ZIP.
   Copyright (c) Michael Daines
   https://github.com/mdaines/viz-js
   Licensed under the MIT License.
+  License text: LICENSE.viz-js
+  https://github.com/mdaines/viz-js/blob/release-viz-3.24.0/LICENSE
 
   This distribution of Viz.js contains, in object code form:
 
-    Graphviz
+    Graphviz 14.1.1
     https://www.graphviz.org/
     Licensed under the Eclipse Public License, Version 1.0.
+    License text: LICENSE.graphviz
+    https://gitlab.com/graphviz/graphviz/-/blob/14.1.1/COPYING
 
-    Expat
+    Expat 2.7.3
     https://libexpat.github.io/
     Licensed under the MIT License.
+    License text: LICENSE.expat
+    https://github.com/libexpat/libexpat/blob/R_2_7_3/expat/COPYING
 
 Both bundled files retain their own copyright and license headers, so the
 NOTICE text above is attribution only and does not replace those licenses.
+
+The release ZIP root contains the full license texts: LICENSE for this
+product (Apache License 2.0), LICENSE.plantuml-core for @plantuml/core
+(MIT), LICENSE.viz-js for Viz.js 3.24.0 (MIT), LICENSE.graphviz for
+Graphviz 14.1.1 (EPL 1.0), and LICENSE.expat for Expat 2.7.3 (MIT).

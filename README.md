@@ -211,7 +211,8 @@ Its distribution contains Graphviz (Eclipse Public License 1.0) and Expat (MIT) 
 
 Neither is committed to this repository.
 Both are fetched from npm into `pegmatite/vendor/` by `npm run vendor` and retain their own license headers.
-See [NOTICE](NOTICE) for the full attribution.
+The release ZIP root also includes this product's LICENSE and NOTICE, the README, `LICENSE.plantuml-core` from `@plantuml/core`, and the license texts for Viz.js, Graphviz, and Expat (`LICENSE.viz-js`, `LICENSE.graphviz`, `LICENSE.expat`).
+See [NOTICE](NOTICE) for the full attribution and the tagged upstream license URLs.
 
 ## Contribution
 
@@ -385,7 +386,8 @@ PlantUML In-Place Preview 自体は Apache License 2.0 のもとで提供され�
 
 どちらもこのリポジトリにはコミットしていません。
 いずれも `npm run vendor` によって npm から `pegmatite/vendor/` へ取得され、それぞれのライセンスヘッダを保持しています。
-帰属表示の全文は [NOTICE](NOTICE) を参照してください。
+リリース ZIP のルートには、本製品の LICENSE と NOTICE、README、`@plantuml/core` 由来の `LICENSE.plantuml-core`、および Viz.js / Graphviz / Expat のライセンス全文 (`LICENSE.viz-js`、`LICENSE.graphviz`、`LICENSE.expat`) も入ります。
+帰属表示の全文と、上流のタグ付き LICENSE URL は [NOTICE](NOTICE) を参照してください。
 
 ### 貢献
 

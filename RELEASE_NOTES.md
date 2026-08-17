@@ -1,3 +1,53 @@
+# 2.0.2
+
+PlantUML In-Place Preview 2.0.2 ships license texts and the README in the
+release ZIP root. There is no change to rendering behavior.
+
+## Changes
+
+* Copy this product's LICENSE, NOTICE, and README.md into the ZIP root when
+  `npm run vendor` runs.
+* Copy each production dependency's LICENSE into the ZIP root as
+  `LICENSE.<package>`. The current file is `LICENSE.plantuml-core` from
+  `@plantuml/core`.
+* Copy the license texts for Viz.js 3.24.0, Graphviz 14.1.1, and Expat
+  2.7.3 into the ZIP root as `LICENSE.viz-js`, `LICENSE.graphviz`, and
+  `LICENSE.expat`. NOTICE records the tagged upstream license URLs.
+
+## Upgrading
+
+Update from the Chrome Web Store (or reload the unpacked extension).
+No configuration change is required.
+
+**Full Changelog**: [2.0.1...2.0.2](https://github.com/Hondarer/pegmatite/compare/2.0.1...2.0.2)
+
+## 日本語
+
+以下は上記英文と同一内容の日本語記述です。
+
+PlantUML In-Place Preview 2.0.2 は、リリース ZIP のルートへライセンス全文と
+README を収録するリリースです。
+描画の動作には変更ありません。
+
+### 変更点
+
+`npm run vendor` の実行時に、本製品の LICENSE、NOTICE、README.md を ZIP
+ルートへコピーするようにしました。
+
+本番依存パッケージの LICENSE も、ZIP ルートへ `LICENSE.<package>` として
+コピーします。現在のファイルは `@plantuml/core` 由来の
+`LICENSE.plantuml-core` です。
+
+Viz.js 3.24.0、Graphviz 14.1.1、Expat 2.7.3 のライセンス全文も、
+`LICENSE.viz-js`、`LICENSE.graphviz`、`LICENSE.expat` として ZIP
+ルートへコピーします。NOTICE には上流のタグ付き LICENSE URL を
+記録しています。
+
+### 移行にあたって
+
+Chrome ウェブストアから更新する (またはパッケージ化していない拡張機能を再読み込みする) だけで十分です。
+設定の変更は不要です。
+
 # 2.0.1
 
 PlantUML In-Place Preview 2.0.1 renames the extension display name.
