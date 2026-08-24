@@ -240,7 +240,7 @@ function changeBackgroundColor(element, color, exist) {
 var STYLE_TEXT = [
 	".pegmatite-block { position: relative; }",
 	".pegmatite-toolbar {",
-	"	position: absolute; top: 4px; right: 4px; z-index: 2;",
+	"	position: absolute; top: -5px; right: 4px; z-index: 2;",
 	"	display: flex; gap: 4px;",
 	"	opacity: 0; transition: opacity 0.12s;",
 	"}",
@@ -248,8 +248,8 @@ var STYLE_TEXT = [
 	".pegmatite-block:focus-within .pegmatite-toolbar { opacity: 1; }",
 	".pegmatite-button {",
 	"	display: inline-flex; align-items: center; justify-content: center;",
-	"	width: 28px; height: 28px; padding: 0; margin: 0; line-height: 0;",
-	"	border: 1px solid rgba(128, 128, 128, 0.4); border-radius: 6px;",
+	"	width: 32px; height: 32px; padding: 0; margin: 0; line-height: 0;",
+	"	border: 1px solid rgba(128, 128, 128, 0.4); border-radius: 8px;",
 	"	background-color: rgba(255, 255, 255, 0.85); color: #24292f;",
 	"	cursor: pointer;",
 	"}",
@@ -294,6 +294,7 @@ function makeIcon(pathData) {
 	pathData.forEach(function (d) {
 		var pathElem = document.createElementNS(SVG_NS, "path");
 		pathElem.setAttribute("d", d);
+		pathElem.setAttribute("fill", "none");
 		iconElem.appendChild(pathElem);
 	});
 	return iconElem;
@@ -385,7 +386,7 @@ function saveSvg(svgElem, fileName) {
 }
 
 // 図とソースを入れ替えても操作のアイコンが残るよう、両者を包む要素を 1 つ挟む。
-function replaceElement(umlElem, svgElem, plantuml, disableChangeBackgroundColor = false) {
+function replaceElement(umlElem, svgElem, plantuml, disableChangeBackgroundColor = false, toolbarStyle = {}) {
 	var parent = umlElem.parentNode;
 	if (parent === null) return; // for asciidoc (div div pre)
 
@@ -404,6 +405,9 @@ function replaceElement(umlElem, svgElem, plantuml, disableChangeBackgroundColor
 
 	var toolbarElem = document.createElement("div");
 	toolbarElem.className = "pegmatite-toolbar";
+	Object.keys(toolbarStyle).forEach(function (key) {
+		toolbarElem.style[key] = toolbarStyle[key];
+	});
 	blockElem.appendChild(toolbarElem);
 
 	state.blockSeq++;
@@ -525,7 +529,9 @@ var siteProfiles = {
 		},
 		"replace": function (elem) {
 			return elem;
-		}
+		},
+		// GitLab のクリップボードコピーボタンと重ならないよう左へオフセット。
+		"toolbarStyle": { "right": "31px" }
 	},
 	"bitbucket.org": {
 		"selector": "div.codehilite.language-plantuml > pre",
@@ -606,6 +612,7 @@ function onLoadAction(siteProfile){
 		}
 		var replaceElem = siteProfile.replace(umlElem);
 		var disableChangeBackgroundColor = siteProfile.disableChangeBackgroundColor || false;
+		var toolbarStyle = siteProfile.toolbarStyle || {};
 		requestRender(plantuml, isDarkMode(), function (error, svgText) {
 			if (error !== null) {
 				showError(replaceElem, error);
@@ -616,7 +623,7 @@ function onLoadAction(siteProfile){
 				showError(replaceElem, "描画結果を解析できませんでした。");
 				return;
 			}
-			replaceElement(replaceElem, svgElem, plantuml, disableChangeBackgroundColor);
+			replaceElement(replaceElem, svgElem, plantuml, disableChangeBackgroundColor, toolbarStyle);
 		});
 	});
 }

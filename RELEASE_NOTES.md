@@ -1,3 +1,42 @@
+# 2.0.3
+
+PlantUML In-Place Preview 2.0.3 improves the placement and visibility of the
+diagram toolbar without changing rendering behavior.
+
+## Changes
+
+* Move the toolbar above the diagram and enlarge its buttons for easier use.
+* Move the GitLab toolbar to the left so it does not overlap GitLab's copy button.
+* Keep the generated SVG icons as outline icons by explicitly disabling path fills.
+
+## Upgrading
+
+Update from the Chrome Web Store (or reload the unpacked extension).
+No configuration change is required.
+
+**Full Changelog**: [2.0.2...2.0.3](https://github.com/Hondarer/pegmatite/compare/2.0.2...2.0.3)
+
+## 日本語
+
+以下は上記英文と同一内容の日本語記述です。
+
+PlantUML In-Place Preview 2.0.3 は、描画動作を変更せずに、図の操作ツールバーの
+配置と見やすさを改善するリリースです。
+
+### 変更点
+
+ツールバーを図の上側へ移動し、操作しやすいようボタンを大きくしました。
+
+GitLab のコピーボタンと重ならないよう、GitLab のツールバーを左へ移動しました。
+
+生成する SVG アイコンは、パスの塗りつぶしを明示的に無効化してアウトライン表示を
+維持します。
+
+### 移行にあたって
+
+Chrome ウェブストアから更新する (またはパッケージ化していない拡張機能を再読み込みする) だけで十分です。
+設定の変更は不要です。
+
 # 2.0.2
 
 PlantUML In-Place Preview 2.0.2 ships license texts and the README in the
