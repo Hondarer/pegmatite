@@ -35,6 +35,9 @@ No PlantUML server is contacted, so diagram source never leaves your machine.
         * The file is always rendered in the light theme, whatever the page theme is.
         * The file is named after `caption`, then `title`, then the `@start` parameter.
         * When the diagram has none of them, the file is numbered instead.
+* Diagrams on the page follow the site theme, such as GitLab Mode or GitHub Appearance.
+    * When the site is set to Auto, or does not declare a theme, the OS color scheme is used.
+    * Changing the site theme redraws diagrams that are already on the page.
 
 ## Sample contents
 
@@ -183,6 +186,7 @@ Confirm that:
 * Class or activity diagrams render, which confirms the WebAssembly layout engine works.
 * Hovering over the area shows the icons, and the first one switches between code block and diagram.
 * The second icon saves the diagram as an SVG file that opens correctly in a browser.
+* On GitLab, the on-page diagram follows Light, Dark, and Auto. The saved file stays in the light theme.
 * The saved file is in the light theme, and is named after `caption` when the diagram has one.
 * A diagram with no `caption`, `title`, or `@start` parameter is saved under a numbered name.
 * The Network tab shows no request to `plantuml.com`.
@@ -264,6 +268,9 @@ PlantUML サーバへは接続しないため、図のソースが手元の環�
 このファイルは、ページのテーマに関わらず常にライトテーマで描画します。
 ファイル名には `caption`、`title`、`@start` のパラメータの順に採った名前を使います。
 どれもない場合は連番を使います。
+画面上の図は、GitLab の Mode や GitHub の Appearance など、サイトが明示したテーマに従います。
+サイトが Auto のとき、またはテーマを持たないときは、OS の配色に従います。
+サイトのテーマを切り替えると、既に描画した図も描き直します。
 
 ### サンプル
 
@@ -357,6 +364,7 @@ npm run vendor
 * クラス図やアクティビティ図が描画されること。WebAssembly のレイアウトエンジンが動作している証拠になります。
 * 領域にホバーするとアイコンが表示され、1 つ目のアイコンで元のコードブロックと図が切り替わること。
 * 2 つ目のアイコンで SVG ファイルが保存され、そのファイルがブラウザで正しく開けること。
+* GitLab では、画面上の図が Light / Dark / Auto に従うこと。保存したファイルはライトテーマのままであること。
 * 保存したファイルがライトテーマであり、`caption` があればその文字列がファイル名になること。
 * `caption`、`title`、`@start` のパラメータのいずれもない図は、連番の名前で保存されること。
 * ネットワークタブに `plantuml.com` へのリクエストが出ないこと。

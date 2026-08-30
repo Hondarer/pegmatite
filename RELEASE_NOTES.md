@@ -1,3 +1,41 @@
+# 2.0.4
+
+PlantUML In-Place Preview 2.0.4 makes on-page diagrams follow the site's
+selected color theme while keeping downloaded SVG files in the light theme.
+
+## Changes
+
+* Follow GitLab Light, Dark, and Auto modes, and GitHub's Light, Dark, and Auto appearance settings.
+* Use the OS color scheme when the site selects Auto or does not declare a theme.
+* Redraw diagrams already on the page when the site's effective theme changes.
+
+## Upgrading
+
+Update from the Chrome Web Store (or reload the unpacked extension).
+No configuration change is required.
+
+**Full Changelog**: [2.0.3...2.0.4](https://github.com/Hondarer/pegmatite/compare/2.0.3...2.0.4)
+
+## 日本語
+
+以下は上記英文と同一内容の日本語記述です。
+
+PlantUML In-Place Preview 2.0.4 は、画面上の図をサイトが選択した配色に
+合わせて表示しつつ、ダウンロードする SVG ファイルをライトテーマに保つリリースです。
+
+### 変更点
+
+GitLab の Light、Dark、Auto モードと、GitHub の Light、Dark、Auto の Appearance 設定に従います。
+
+サイトが Auto を選択している場合、またはテーマを明示していない場合は、OS の配色に従います。
+
+サイトの実効テーマが変わると、既に画面上にある図も描き直します。
+
+### 移行にあたって
+
+Chrome ウェブストアから更新する (またはパッケージ化していない拡張機能を再読み込みする) だけで十分です。
+設定の変更は不要です。
+
 # 2.0.3
 
 PlantUML In-Place Preview 2.0.3 improves the placement and visibility of the

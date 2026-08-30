@@ -27,7 +27,10 @@ var state = window.pegmatiteState = window.pegmatiteState || {
 	"listening": false,
 	"codePre": null,
 	"styleElem": null,
-	"blockSeq": 0
+	"blockSeq": 0,
+	"renderedBlocks": [],
+	"themeWatching": false,
+	"lastDark": null
 };
 
 function getRendererOrigin() {
@@ -37,9 +40,41 @@ function getRendererOrigin() {
 	return state.origin;
 }
 
-function isDarkMode() {
+function prefersDarkScheme() {
 	return !!(window.matchMedia &&
 		window.matchMedia("(prefers-color-scheme: dark)").matches);
+}
+
+function elementHasClass(elem, name) {
+	return elem != null && elem.classList != null && elem.classList.contains(name);
+}
+
+function colorModeOf(elem) {
+	if (elem == null || typeof elem.getAttribute !== "function") return "";
+	return elem.getAttribute("data-color-mode") || "";
+}
+
+// サイトが明示したテーマを先に見る。OS の prefers-color-scheme は、
+// GitLab の Light/Dark や GitHub の Appearance とは独立している。
+function isDarkMode() {
+	var root = document.documentElement;
+	var body = document.body;
+
+	if (elementHasClass(root, "gl-light") || elementHasClass(body, "gl-light")) {
+		return false;
+	}
+	if (elementHasClass(root, "gl-dark") || elementHasClass(body, "gl-dark")) {
+		return true;
+	}
+	if (elementHasClass(root, "gl-system") || elementHasClass(body, "gl-system")) {
+		return prefersDarkScheme();
+	}
+
+	var colorMode = colorModeOf(root) || colorModeOf(body);
+	if (colorMode === "light") return false;
+	if (colorMode === "dark") return true;
+
+	return prefersDarkScheme();
 }
 
 function handleRendererMessage(event) {
@@ -254,11 +289,29 @@ var STYLE_TEXT = [
 	"	cursor: pointer;",
 	"}",
 	".pegmatite-button:hover { background-color: rgb(255, 255, 255); }",
+	"html.gl-dark .pegmatite-button,",
+	"body.gl-dark .pegmatite-button,",
+	"html[data-color-mode='dark'] .pegmatite-button {",
+	"	background-color: rgba(32, 36, 42, 0.85); color: #e6edf3;",
+	"}",
+	"html.gl-dark .pegmatite-button:hover,",
+	"body.gl-dark .pegmatite-button:hover,",
+	"html[data-color-mode='dark'] .pegmatite-button:hover {",
+	"	background-color: rgb(32, 36, 42);",
+	"}",
 	"@media (prefers-color-scheme: dark) {",
-	"	.pegmatite-button {",
+	"	html.gl-system .pegmatite-button,",
+	"	body.gl-system .pegmatite-button,",
+	"	html[data-color-mode='auto'] .pegmatite-button,",
+	"	html:not(.gl-light):not(.gl-dark):not(.gl-system):not([data-color-mode]) .pegmatite-button {",
 	"		background-color: rgba(32, 36, 42, 0.85); color: #e6edf3;",
 	"	}",
-	"	.pegmatite-button:hover { background-color: rgb(32, 36, 42); }",
+	"	html.gl-system .pegmatite-button:hover,",
+	"	body.gl-system .pegmatite-button:hover,",
+	"	html[data-color-mode='auto'] .pegmatite-button:hover,",
+	"	html:not(.gl-light):not(.gl-dark):not(.gl-system):not([data-color-mode]) .pegmatite-button:hover {",
+	"		background-color: rgb(32, 36, 42);",
+	"	}",
 	"}"
 ].join("\n");
 
@@ -386,9 +439,11 @@ function saveSvg(svgElem, fileName) {
 }
 
 // 図とソースを入れ替えても操作のアイコンが残るよう、両者を包む要素を 1 つ挟む。
-function replaceElement(umlElem, svgElem, plantuml, disableChangeBackgroundColor = false, toolbarStyle = {}) {
+function replaceElement(umlElem, svgElem, plantuml, disableChangeBackgroundColor = false, toolbarStyle = {}, renderedDark) {
 	var parent = umlElem.parentNode;
 	if (parent === null) return; // for asciidoc (div div pre)
+
+	if (renderedDark === undefined) renderedDark = isDarkMode();
 
 	ensureStyle();
 	var codePre = getCodePre();
@@ -413,6 +468,13 @@ function replaceElement(umlElem, svgElem, plantuml, disableChangeBackgroundColor
 	state.blockSeq++;
 	var index = state.blockSeq;
 	var showingDiagram = true;
+	var item = {
+		"blockElem": blockElem,
+		"diagramElem": diagramElem,
+		"plantuml": plantuml,
+		"dark": renderedDark,
+		"svgElem": svgElem
+	};
 
 	var toggleButton = makeButton(LABEL_SHOW_SOURCE, ICON_SOURCE, function () {
 		showingDiagram = !showingDiagram;
@@ -433,13 +495,78 @@ function replaceElement(umlElem, svgElem, plantuml, disableChangeBackgroundColor
 
 	// 表示している内容に関わらず、図を SVG として保存できるようにする。
 	toolbarElem.appendChild(makeButton(LABEL_DOWNLOAD, ICON_DOWNLOAD, function () {
-		downloadSvg(plantuml, svgElem, index);
+		downloadSvg(plantuml, item.svgElem, index);
 	}));
 
 	parent.replaceChild(blockElem, umlElem);
 	blockElem.appendChild(diagramElem);
 	if (!disableChangeBackgroundColor) {
 		changeBackgroundColor(parent, codePre.parentColor, codePre.exist);
+	}
+
+	state.renderedBlocks.push(item);
+	if (isDarkMode() !== renderedDark) applyPageTheme();
+}
+
+// 描画済みの図はコードブロックが DOM から外れるため、走査だけではテーマ変更を拾えない。
+function applyPageTheme() {
+	var dark = isDarkMode();
+	state.lastDark = dark;
+	state.renderedBlocks = state.renderedBlocks.filter(function (item) {
+		return item.blockElem.isConnected === true;
+	});
+	state.renderedBlocks.forEach(function (item) {
+		if (item.dark === dark) return;
+		item.dark = dark;
+		var expectedDark = dark;
+		requestRender(item.plantuml, dark, function (error, svgText) {
+			if (item.dark !== expectedDark) return;
+			if (error !== null) return;
+			var nextSvg = sanitizeSvg(svgText);
+			if (nextSvg === null) return;
+			nextSvg.style.maxWidth = "100%";
+			nextSvg.style.height = "auto";
+			while (item.diagramElem.firstChild != null) {
+				item.diagramElem.removeChild(item.diagramElem.firstChild);
+			}
+			item.diagramElem.appendChild(nextSvg);
+			item.svgElem = nextSvg;
+		});
+	});
+}
+
+function watchTheme() {
+	if (state.themeWatching) return;
+	state.themeWatching = true;
+	state.lastDark = isDarkMode();
+
+	var timer;
+	function onMaybeChanged() {
+		clearTimeout(timer);
+		timer = setTimeout(function () {
+			if (state.lastDark === isDarkMode()) return;
+			applyPageTheme();
+		}, 100);
+	}
+
+	var observer = new MutationObserver(onMaybeChanged);
+	observer.observe(document.documentElement, {
+		"attributes": true,
+		"attributeFilter": ["class", "data-color-mode"]
+	});
+	if (document.body != null) {
+		observer.observe(document.body, {
+			"attributes": true,
+			"attributeFilter": ["class", "data-color-mode"]
+		});
+	}
+
+	if (!window.matchMedia) return;
+	var media = window.matchMedia("(prefers-color-scheme: dark)");
+	if (typeof media.addEventListener === "function") {
+		media.addEventListener("change", onMaybeChanged);
+	} else if (typeof media.addListener === "function") {
+		media.addListener(onMaybeChanged);
 	}
 }
 
@@ -613,7 +740,8 @@ function onLoadAction(siteProfile){
 		var replaceElem = siteProfile.replace(umlElem);
 		var disableChangeBackgroundColor = siteProfile.disableChangeBackgroundColor || false;
 		var toolbarStyle = siteProfile.toolbarStyle || {};
-		requestRender(plantuml, isDarkMode(), function (error, svgText) {
+		var dark = isDarkMode();
+		requestRender(plantuml, dark, function (error, svgText) {
 			if (error !== null) {
 				showError(replaceElem, error);
 				return;
@@ -623,7 +751,7 @@ function onLoadAction(siteProfile){
 				showError(replaceElem, "描画結果を解析できませんでした。");
 				return;
 			}
-			replaceElement(replaceElem, svgElem, plantuml, disableChangeBackgroundColor, toolbarStyle);
+			replaceElement(replaceElem, svgElem, plantuml, disableChangeBackgroundColor, toolbarStyle, dark);
 		});
 	});
 }
@@ -668,6 +796,8 @@ function run() {
 }
 
 function bootstrap() {
+	watchTheme();
+
 	var profileKey = getSiteProfileKey();
 	var siteProfile = siteProfiles[profileKey] || siteProfiles["default"];
 

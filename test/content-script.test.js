@@ -26,9 +26,15 @@ function makeElement(tagName) {
 		listeners: {},
 		parentNode: null,
 		clicked: 0,
+		className: "",
 		// 生存判定 (rendererIsAlive、ensureStyle) が真になる状態を模す
 		isConnected: true,
 		contentWindow: { postMessage: function () {} },
+		classList: {
+			contains: function (name) {
+				return elem.className.split(/\s+/).indexOf(name) !== -1;
+			}
+		},
 		get firstChild() {
 			return elem.childNodes.length > 0 ? elem.childNodes[0] : null;
 		},
@@ -92,6 +98,16 @@ function makeUrlStub(objectUrls) {
 	return stub;
 }
 
+function setMatchMedia(context, dark) {
+	context.window.matchMedia = function () {
+		return {
+			matches: dark,
+			addEventListener: function () {},
+			addListener: function () {}
+		};
+	};
+}
+
 function makeContext() {
 	var created = [];
 	var objectUrls = [];
@@ -104,9 +120,7 @@ function makeContext() {
 			}
 		},
 		document: {
-			body: {
-				appendChild: function () {}
-			},
+			body: makeElement("body"),
 			querySelector: function () {
 				return null;
 			},
@@ -147,9 +161,7 @@ function makeContext() {
 		pathname: "/group/project"
 	};
 	context.window.addEventListener = function () {};
-	context.window.matchMedia = function () {
-		return { matches: false };
-	};
+	setMatchMedia(context, false);
 	return context;
 }
 
@@ -537,6 +549,123 @@ function testDiagramFileName(context) {
 		"取り除いた結果が空になる場合も連番を使うこと");
 }
 
+function testIsDarkModeFollowsPageTheme(context) {
+	setMatchMedia(context, true);
+	assert.strictEqual(context.isDarkMode(), true, "マーカーがなければ OS に従うこと");
+
+	context.document.documentElement.className = "gl-light";
+	assert.strictEqual(context.isDarkMode(), false,
+		"GitLab Light は OS がダークでもライトであること");
+
+	context.document.documentElement.className = "gl-dark";
+	setMatchMedia(context, false);
+	assert.strictEqual(context.isDarkMode(), true,
+		"GitLab Dark は OS がライトでもダークであること");
+
+	context.document.documentElement.className = "gl-system";
+	setMatchMedia(context, true);
+	assert.strictEqual(context.isDarkMode(), true, "GitLab Auto は OS に従うこと");
+	setMatchMedia(context, false);
+	assert.strictEqual(context.isDarkMode(), false, "GitLab Auto は OS ライトならライトであること");
+
+	context.document.documentElement.className = "gl-system gl-dark";
+	setMatchMedia(context, false);
+	assert.strictEqual(context.isDarkMode(), true,
+		"GitLab Auto が gl-dark を付けた状態はダークであること");
+
+	context.document.documentElement.className = "";
+	context.document.body.className = "gl-dark";
+	setMatchMedia(context, false);
+	assert.strictEqual(context.isDarkMode(), true, "古い GitLab の body.gl-dark を拾うこと");
+	context.document.body.className = "";
+
+	context.document.documentElement.setAttribute("data-color-mode", "light");
+	setMatchMedia(context, true);
+	assert.strictEqual(context.isDarkMode(), false,
+		"GitHub の light は OS がダークでもライトであること");
+
+	context.document.documentElement.setAttribute("data-color-mode", "dark");
+	setMatchMedia(context, false);
+	assert.strictEqual(context.isDarkMode(), true,
+		"GitHub の dark は OS がライトでもダークであること");
+
+	context.document.documentElement.setAttribute("data-color-mode", "auto");
+	setMatchMedia(context, true);
+	assert.strictEqual(context.isDarkMode(), true, "GitHub Auto は OS に従うこと");
+
+	context.document.documentElement.className = "";
+	context.document.body.className = "";
+	delete context.document.documentElement.attributes["data-color-mode"];
+	setMatchMedia(context, false);
+}
+
+function testOnLoadActionFollowsGitLabLight() {
+	var context = evaluate(makeContext());
+	context.document.documentElement.className = "gl-light";
+	setMatchMedia(context, true);
+
+	var lines = [
+		{ textContent: "@startuml" },
+		{ textContent: "Alice -> Bob" },
+		{ textContent: "@enduml" }
+	];
+	var code = {
+		tagName: "CODE",
+		querySelectorAll: function () {
+			return lines;
+		}
+	};
+	var pre = {
+		tagName: "PRE",
+		querySelector: function () {
+			return code;
+		}
+	};
+	var requested = [];
+
+	context.document.querySelectorAll = function () {
+		return [pre];
+	};
+	context.requestRender = function (plantuml, dark, callback) {
+		requested.push({ source: plantuml, dark: dark, callback: callback });
+	};
+
+	context.onLoadAction(context.siteProfiles["gitlab.com"]);
+	assert.strictEqual(requested.length, 1);
+	assert.strictEqual(requested[0].dark, false,
+		"GitLab Light では OS がダークでもライトで描くこと");
+}
+
+function testApplyPageThemeRerenders() {
+	var context = evaluate(makeContext());
+	context.sanitizeSvg = function () {
+		var svg = makeElement("svg");
+		svg.marker = "next";
+		return svg;
+	};
+	var requested = [];
+	context.requestRender = function (plantuml, dark, callback) {
+		requested.push({ plantuml: plantuml, dark: dark });
+		callback(null, "<svg/>");
+	};
+
+	var source = "@startuml\nA -> B\n@enduml";
+	var placed = placeDiagram(context, source);
+	assert.strictEqual(context.state.renderedBlocks.length, 1);
+	assert.strictEqual(context.state.renderedBlocks[0].dark, false);
+
+	context.document.documentElement.className = "gl-dark";
+	context.applyPageTheme();
+
+	assert.strictEqual(requested.length, 1, "テーマが変わったときだけ描き直すこと");
+	assert.strictEqual(requested[0].dark, true);
+	assert.strictEqual(placed.diagramElem.childNodes[0].marker, "next");
+	assert.strictEqual(context.state.renderedBlocks[0].svgElem.marker, "next");
+
+	context.applyPageTheme();
+	assert.strictEqual(requested.length, 1, "同じテーマでは描き直さないこと");
+}
+
 // sanitizeNode は DOM の一部の API しか使わないため、最小限のスタブで検証できる。
 // sanitizeSvg 全体は DOMParser を要するのでブラウザでの動作確認に委ねる。
 function node(name, attributes, children) {
@@ -600,6 +729,9 @@ testHoverToolbar();
 testToggleButton();
 testDownloadButton();
 testDiagramFileName(context);
+testIsDarkModeFollowsPageTheme(context);
+testOnLoadActionFollowsGitLabLight();
+testApplyPageThemeRerenders();
 testReinjectionKeepsSingleRenderer();
 testDetachedRendererIsRecreated();
 testSvgCache();
