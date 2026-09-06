@@ -33,10 +33,35 @@ function makeElement(tagName) {
 		classList: {
 			contains: function (name) {
 				return elem.className.split(/\s+/).indexOf(name) !== -1;
+			},
+			add: function (name) {
+				if (elem.className.split(/\s+/).indexOf(name) === -1) {
+					elem.className = (elem.className + " " + name).trim();
+				}
 			}
 		},
 		get firstChild() {
 			return elem.childNodes.length > 0 ? elem.childNodes[0] : null;
+		},
+		querySelector: function (selector) {
+			function match(node, sel) {
+				if (!node || !node.tagName) return false;
+				if (sel.charAt(0) === ".") {
+					return (node.className || "").split(/\s+/).indexOf(sel.slice(1)) !== -1;
+				}
+				return node.tagName.toLowerCase() === sel.toLowerCase();
+			}
+			function walk(node, sel) {
+				var i;
+				for (i = 0; i < (node.childNodes || []).length; i++) {
+					var child = node.childNodes[i];
+					if (match(child, sel)) return child;
+					var found = walk(child, sel);
+					if (found) return found;
+				}
+				return null;
+			}
+			return walk(elem, selector);
 		},
 		setAttribute: function (name, value) {
 			elem.attributes[name] = value;
@@ -61,6 +86,16 @@ function makeElement(tagName) {
 			prev.parentNode = null;
 			next.parentNode = elem;
 			return prev;
+		},
+		insertBefore: function (next, ref) {
+			if (next.parentNode && next.parentNode.removeChild) {
+				next.parentNode.removeChild(next);
+			}
+			var index = elem.childNodes.indexOf(ref);
+			if (index < 0) elem.childNodes.push(next);
+			else elem.childNodes.splice(index, 0, next);
+			next.parentNode = elem;
+			return next;
 		},
 		addEventListener: function (type, handler) {
 			if (elem.listeners[type] === undefined) elem.listeners[type] = [];
@@ -458,6 +493,66 @@ function testHoverToolbar() {
 	assert.strictEqual(context.state.styleElem, styleElem);
 }
 
+function testToolbarStaysInsideOverflow(context) {
+	assert.strictEqual(context.STYLE_TEXT.indexOf("top: -5px"), -1,
+		"負の top は overflow: auto で上端が欠けること");
+	assert.notStrictEqual(context.STYLE_TEXT.indexOf("top: 8px"), -1,
+		"ツールバーを枠の内側に置くこと");
+	assert.notStrictEqual(context.STYLE_TEXT.indexOf("width: 100%"), -1,
+		"ブロックをコード枠の幅いっぱいにすること");
+	assert.notStrictEqual(context.STYLE_TEXT.indexOf("pegmatite-toolbar--github"), -1);
+	assert.notStrictEqual(context.STYLE_TEXT.indexOf("margin-left: auto"), -1);
+	assert.notStrictEqual(context.STYLE_TEXT.indexOf("padding: 8px"), -1,
+		"図の余白は 8px であること");
+}
+
+function testGitHubAttachesToolbarToClipboard() {
+	var context = evaluate(makeContext());
+	var highlight = makeElement("DIV");
+	highlight.className = "highlight highlight-source-wsd position-relative overflow-auto";
+	var pre = makeElement("PRE");
+	var clipboard = makeElement("DIV");
+	clipboard.className = "zeroclipboard-container";
+	var copy = makeElement("CLIPBOARD-COPY");
+	clipboard.appendChild(copy);
+	highlight.appendChild(pre);
+	highlight.appendChild(clipboard);
+
+	var svg = makeElement("svg");
+	context.replaceElement(pre, svg, "@startuml\nA -> B\n@enduml", true, {}, false, {
+		"attachToolbarToClipboard": true,
+		"centerDiagram": true
+	});
+
+	var blockElem = highlight.childNodes[0];
+	assert.strictEqual(blockElem.className, "pegmatite-block pegmatite-block--center");
+	assert.strictEqual(highlight.className.indexOf("pegmatite-hover-root") !== -1, true,
+		"ホバー判定をコピーと同じ枠へ付けること");
+	assert.strictEqual(clipboard.childNodes[0].className, "pegmatite-toolbar pegmatite-toolbar--github");
+	assert.strictEqual(clipboard.childNodes[1], copy, "コピーボタンの左へツールバーを置くこと");
+	assert.strictEqual(clipboard.style.display, "flex");
+	assert.strictEqual(clipboard.style.alignItems, "center");
+	assert.strictEqual(clipboard.style.top, "0");
+	assert.strictEqual(clipboard.style.bottom, "auto");
+	assert.strictEqual(clipboard.style.height, "auto");
+	assert.strictEqual(context.siteProfiles["gitlab.com"].attachToolbarToClipboard, undefined);
+	assert.strictEqual(context.siteProfiles["gitlab.com"].toolbarStyle.right, "31px");
+}
+
+function testPreParentGetsFullWidth() {
+	var context = evaluate(makeContext());
+	var pre = makeElement("PRE");
+	var code = makeElement("CODE");
+	var svg = makeElement("svg");
+	pre.appendChild(code);
+
+	context.replaceElement(code, svg, "@startuml\nA -> B\n@enduml", true);
+
+	assert.strictEqual(pre.style.width, "100%");
+	assert.strictEqual(pre.style.maxWidth, "100%");
+	assert.strictEqual(pre.childNodes[0].className, "pegmatite-block");
+}
+
 function testToggleButton() {
 	var context = evaluate(makeContext());
 	var placed = placeDiagram(context);
@@ -726,6 +821,9 @@ testLoadingDefersConversion(context);
 testDynamicContentObserver(context);
 testSanitizeNode(context);
 testHoverToolbar();
+testToolbarStaysInsideOverflow(context);
+testGitHubAttachesToolbarToClipboard();
+testPreParentGetsFullWidth();
 testToggleButton();
 testDownloadButton();
 testDiagramFileName(context);

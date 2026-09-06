@@ -272,16 +272,26 @@ function changeBackgroundColor(element, color, exist) {
 
 // アイコンの表示と非表示は :hover と :focus-within で切り替えるため、インラインスタイルでは
 // 足りない。クラス名はすべて pegmatite- で始めて、ページ側の CSS と衝突しないようにする。
+// GitHub の pre / .highlight は overflow: auto のため、負の top だとボタンの上端が欠ける。
+// ブロックをコード枠の幅いっぱいにし、ツールバーは枠の内側へ置く。
 var STYLE_TEXT = [
-	".pegmatite-block { position: relative; }",
+	".pegmatite-block { position: relative; display: block; width: 100%; box-sizing: border-box; }",
 	".pegmatite-toolbar {",
-	"	position: absolute; top: -5px; right: 4px; z-index: 2;",
+	"	position: absolute; top: 8px; right: 8px; z-index: 2;",
 	"	display: flex; gap: 4px;",
 	"	opacity: 0; transition: opacity 0.12s;",
 	"}",
 	".pegmatite-block:hover .pegmatite-toolbar,",
-	".pegmatite-block:focus-within .pegmatite-toolbar { opacity: 1; }",
+	".pegmatite-block:focus-within .pegmatite-toolbar,",
+	".pegmatite-hover-root:hover .pegmatite-toolbar,",
+	".pegmatite-hover-root:focus-within .pegmatite-toolbar { opacity: 1; }",
+	".pegmatite-toolbar--github { position: static; top: auto; right: auto; }",
+	".pegmatite-block--center { box-sizing: border-box; padding: 8px; }",
+	".pegmatite-block--center .pegmatite-diagram > svg {",
+	"	display: block; margin-left: auto; margin-right: auto;",
+	"}",
 	".pegmatite-button {",
+	"	box-sizing: border-box; appearance: none; -webkit-appearance: none;",
 	"	display: inline-flex; align-items: center; justify-content: center;",
 	"	width: 32px; height: 32px; padding: 0; margin: 0; line-height: 0;",
 	"	border: 1px solid rgba(128, 128, 128, 0.4); border-radius: 8px;",
@@ -438,17 +448,69 @@ function saveSvg(svgElem, fileName) {
 	}, 1000);
 }
 
+// GitHub の blob プレビューは pre とコピーボタンが兄弟で、コピーは
+// .highlight / .snippet-clipboard-content 上の .zeroclipboard-container にある。
+// ツールバーをその容器へ移すと、オフセットの見積りをせずに並ぶ。
+function findClipboardHost(startElem) {
+	var node = startElem;
+	var depth;
+	for (depth = 0; depth < 6 && node != null && node.parentNode != null; depth++) {
+		var parent = node.parentNode;
+		if (typeof parent.querySelector === "function") {
+			var host = parent.querySelector(".zeroclipboard-container");
+			if (host != null) return host;
+		}
+		node = parent;
+	}
+	return null;
+}
+
+function attachToolbarToClipboard(toolbarElem, clipboardHost) {
+	toolbarElem.className = "pegmatite-toolbar pegmatite-toolbar--github";
+	var hoverRoot = clipboardHost.parentNode;
+	if (hoverRoot != null && hoverRoot.classList != null) {
+		hoverRoot.classList.add("pegmatite-hover-root");
+	}
+	if (toolbarElem.parentNode != null) {
+		toolbarElem.parentNode.removeChild(toolbarElem);
+	}
+	if (clipboardHost.firstChild != null) {
+		clipboardHost.insertBefore(toolbarElem, clipboardHost.firstChild);
+	} else {
+		clipboardHost.appendChild(toolbarElem);
+	}
+	// GitHub の容器は top/bottom で縦いっぱいに伸びることがある。
+	// 中寄せせず、コピーと同じ右上へ固定する。
+	clipboardHost.style.display = "flex";
+	clipboardHost.style.flexDirection = "row";
+	clipboardHost.style.alignItems = "center";
+	clipboardHost.style.position = "absolute";
+	clipboardHost.style.top = "0";
+	clipboardHost.style.right = "0";
+	clipboardHost.style.bottom = "auto";
+	clipboardHost.style.height = "auto";
+}
+
 // 図とソースを入れ替えても操作のアイコンが残るよう、両者を包む要素を 1 つ挟む。
-function replaceElement(umlElem, svgElem, plantuml, disableChangeBackgroundColor = false, toolbarStyle = {}, renderedDark) {
+function replaceElement(umlElem, svgElem, plantuml, disableChangeBackgroundColor = false, toolbarStyle = {}, renderedDark, placeOptions) {
 	var parent = umlElem.parentNode;
 	if (parent === null) return; // for asciidoc (div div pre)
 
 	if (renderedDark === undefined) renderedDark = isDarkMode();
+	placeOptions = placeOptions || {};
 
 	ensureStyle();
 	var codePre = getCodePre();
 	svgElem.style.maxWidth = "100%";
 	svgElem.style.height = "auto";
+
+	// GitHub は pre > code を inline にしている。置き換えたブロックが図の幅に縮むと、
+	// ツールバーが図の右上に重なり、overflow: auto で見切れる。
+	if (parent.tagName === "PRE") {
+		parent.style.width = "100%";
+		parent.style.maxWidth = "100%";
+		parent.style.boxSizing = "border-box";
+	}
 
 	var diagramElem = document.createElement("div");
 	diagramElem.className = "pegmatite-diagram";
@@ -456,13 +518,17 @@ function replaceElement(umlElem, svgElem, plantuml, disableChangeBackgroundColor
 	diagramElem.appendChild(svgElem);
 
 	var blockElem = document.createElement("div");
-	blockElem.className = "pegmatite-block";
+	blockElem.className = placeOptions.centerDiagram
+		? "pegmatite-block pegmatite-block--center"
+		: "pegmatite-block";
 
 	var toolbarElem = document.createElement("div");
 	toolbarElem.className = "pegmatite-toolbar";
-	Object.keys(toolbarStyle).forEach(function (key) {
-		toolbarElem.style[key] = toolbarStyle[key];
-	});
+	if (!placeOptions.attachToolbarToClipboard) {
+		Object.keys(toolbarStyle).forEach(function (key) {
+			toolbarElem.style[key] = toolbarStyle[key];
+		});
+	}
 	blockElem.appendChild(toolbarElem);
 
 	state.blockSeq++;
@@ -500,6 +566,16 @@ function replaceElement(umlElem, svgElem, plantuml, disableChangeBackgroundColor
 
 	parent.replaceChild(blockElem, umlElem);
 	blockElem.appendChild(diagramElem);
+	if (placeOptions.attachToolbarToClipboard) {
+		var clipboardHost = findClipboardHost(blockElem);
+		if (clipboardHost != null) {
+			attachToolbarToClipboard(toolbarElem, clipboardHost);
+		} else {
+			Object.keys(toolbarStyle).forEach(function (key) {
+				toolbarElem.style[key] = toolbarStyle[key];
+			});
+		}
+	}
 	if (!disableChangeBackgroundColor) {
 		changeBackgroundColor(parent, codePre.parentColor, codePre.exist);
 	}
@@ -689,7 +765,11 @@ var siteProfiles = {
 			var child = elem.querySelector("code");
 			if (child != null) return child; // markdown
 			return elem; // asciidoc
-		}
+		},
+		// blob プレビューは .highlight > pre + .zeroclipboard-container。
+		// ツールバーをコピーと同じ容器へ移し、図は左右中央へ置く。
+		"attachToolbarToClipboard": true,
+		"centerDiagram": true
 	},
 	"gitbucket": {
 		"selector": "pre.prettyprint.lang-puml, pre.prettyprint.lang-plantuml",
@@ -740,6 +820,10 @@ function onLoadAction(siteProfile){
 		var replaceElem = siteProfile.replace(umlElem);
 		var disableChangeBackgroundColor = siteProfile.disableChangeBackgroundColor || false;
 		var toolbarStyle = siteProfile.toolbarStyle || {};
+		var placeOptions = {
+			"attachToolbarToClipboard": !!siteProfile.attachToolbarToClipboard,
+			"centerDiagram": !!siteProfile.centerDiagram
+		};
 		var dark = isDarkMode();
 		requestRender(plantuml, dark, function (error, svgText) {
 			if (error !== null) {
@@ -751,7 +835,7 @@ function onLoadAction(siteProfile){
 				showError(replaceElem, "描画結果を解析できませんでした。");
 				return;
 			}
-			replaceElement(replaceElem, svgElem, plantuml, disableChangeBackgroundColor, toolbarStyle, dark);
+			replaceElement(replaceElem, svgElem, plantuml, disableChangeBackgroundColor, toolbarStyle, dark, placeOptions);
 		});
 	});
 }

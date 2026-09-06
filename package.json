@@ -8,7 +8,7 @@
 		"format": "eslint pegmatite test tools --fix",
 		"lint": "eslint pegmatite test tools",
 		"pretest": "node tools/copy-vendor.js",
-		"test": "node test/content-script.test.js && node test/manifest.test.js"
+		"test": "node test/content-script.test.js && node test/manifest.test.js && node test/renderer.test.js"
 	},
 	"repository": {
 		"type": "git",

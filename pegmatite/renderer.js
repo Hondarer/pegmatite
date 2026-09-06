@@ -8,10 +8,27 @@ import { render } from "./vendor/plantuml.js";
 // 完了の検知は、描画先に svg 要素が現れたことを MutationObserver で捉えて行う。
 
 var RENDER_TIMEOUT_MS = 30000;
+var VIEWBOX_PAD = 2;
 
 var target = document.getElementById("plantuml-output");
 var queue = [];
 var rendering = false;
+
+// @plantuml/core は viewBox を図形の幾何から決め、線幅を含めない。
+// 線はパスの中心に描かれるため、x=0 の図は左端が欠ける。余白を足して収める。
+function expandSvgViewBox(svg, pad) {
+	var box = svg.viewBox && svg.viewBox.baseVal;
+	if (!box || box.width <= 0 || box.height <= 0) return;
+	var x = box.x;
+	var y = box.y;
+	var width = box.width;
+	var height = box.height;
+	svg.setAttribute("viewBox", (x - pad) + " " + (y - pad) + " " + (width + pad * 2) + " " + (height + pad * 2));
+	var attrWidth = parseFloat(svg.getAttribute("width"));
+	var attrHeight = parseFloat(svg.getAttribute("height"));
+	if (attrWidth > 0) svg.setAttribute("width", String(attrWidth + pad * 2));
+	if (attrHeight > 0) svg.setAttribute("height", String(attrHeight + pad * 2));
+}
 
 function reply(job, message) {
 	message.requestId = job.requestId;
@@ -42,6 +59,7 @@ function processQueue() {
 	observer = new MutationObserver(function () {
 		var svg = target.querySelector("svg");
 		if (svg) {
+			expandSvgViewBox(svg, VIEWBOX_PAD);
 			finish({ type: "PLANTUML_RESULT", svg: svg.outerHTML });
 		}
 	});
