@@ -1,3 +1,44 @@
+# 2.0.5
+
+PlantUML In-Place Preview 2.0.5 keeps stroke edges visible in the rendered SVG
+and places the GitHub toolbar next to GitHub's copy button.
+
+## Changes
+
+* Expand the SVG `viewBox` by 2px after rendering so stroke edges are not clipped, including mind maps, Gantt charts, JSON, and YAML.
+* On GitHub blob previews, attach the hover toolbar to GitHub's copy-button container so the icons sit at the top right beside the native copy control.
+* Center diagrams horizontally in the GitHub code block, with an 8px inset around the figure.
+* Leave GitLab toolbar placement unchanged.
+
+## Upgrading
+
+Update from the Chrome Web Store (or reload the unpacked extension).
+No configuration change is required.
+
+**Full Changelog**: [2.0.4...2.0.5](https://github.com/Hondarer/pegmatite/compare/2.0.4...2.0.5)
+
+## 日本語
+
+以下は上記英文と同一内容の日本語記述です。
+
+PlantUML In-Place Preview 2.0.5 は、描画した SVG の線が欠けないようにし、
+GitHub では操作アイコンをサイト標準のコピーボタンの横へ置くリリースです。
+
+### 変更点
+
+描画直後に SVG の `viewBox` を 2px 広げ、マインドマップ、Gantt、JSON、YAML などで線の端が欠けないようにします。
+
+GitHub の blob プレビューでは、ホバー時のツールバーを GitHub のコピーボタンと同じ容器へ移し、右上で並ぶようにします。
+
+GitHub のコード枠では図を左右中央に置き、図の周りに 8px の余白を取ります。
+
+GitLab のツールバー配置は変えません。
+
+### 移行にあたって
+
+Chrome ウェブストアから更新する (またはパッケージ化していない拡張機能を再読み込みする) だけで十分です。
+設定の変更は不要です。
+
 # 2.0.4
 
 PlantUML In-Place Preview 2.0.4 makes on-page diagrams follow the site's
